@@ -1,6 +1,5 @@
 /**
- * Data Awal & Default Depot Zam Water
- * Data ini disinkronkan dengan Google Sheets saat URL Apps Script aktif
+ * Data Awal & Default Depot Zam Water v2.0
  */
 const DEFAULT_DATA = {
   produk: [
@@ -89,7 +88,7 @@ const DEFAULT_DATA = {
       kategori: 'accessories',
       kategoriLabel: 'Aksesoris',
       harga: 15000,
-      stok: 12, // Alert stok menipis
+      stok: 12,
       satuan: 'Pack',
       badge: 'Stok Menipis',
       badgeColor: 'error',
@@ -143,17 +142,6 @@ const DEFAULT_DATA = {
       langganan: '8 Galon RO/minggu',
       depositGalon: 8,
       status: 'Korporat'
-    },
-    {
-      id: 'CUST-004',
-      nama: 'Pak RT Bambang',
-      organisasi: 'Perumahan RW 04',
-      kategori: 'Perumahan',
-      telepon: '081234445566',
-      alamat: 'Jl. Cemara No. 8, Blok A',
-      langganan: '4 Galon Mineral/minggu',
-      depositGalon: 4,
-      status: 'Tetap'
     }
   ],
 
@@ -171,34 +159,6 @@ const DEFAULT_DATA = {
       klaimBensin: 0,
       catatan: 'Pengantaran lancar, semua galon tertukar aman.',
       status: 'Tervalidasi Kasir'
-    },
-    {
-      id: 'TRIP-20240524-01',
-      waktu: '24 Mei 2024 • 08:45 WIB',
-      namaSupir: 'Budi Santoso',
-      armada: 'Motor Roda 3 Tossa B-4921-ZAM',
-      tujuan: 'Trip 1 - Gang Sejahtera & Pasar',
-      galonKeluar: 20,
-      galonKembali: 20,
-      selisih: 0,
-      setoranTunai: 120000,
-      klaimBensin: 0,
-      catatan: 'Pengantaran pagi toko sembako.',
-      status: 'Tervalidasi Kasir'
-    },
-    {
-      id: 'TRIP-20240523-04',
-      waktu: '23 Mei 2024 • 17:00 WIB',
-      namaSupir: 'Budi Santoso',
-      armada: 'Motor Roda 3 Tossa B-4921-ZAM',
-      tujuan: 'Total Shift Kemarin (Trip 1-4)',
-      galonKeluar: 62,
-      galonKembali: 62,
-      selisih: 0,
-      setoranTunai: 372000,
-      klaimBensin: 20000,
-      catatan: 'Selesai shift sore.',
-      status: 'Arsip Shift'
     }
   ],
 
@@ -294,12 +254,11 @@ const DEFAULT_DATA = {
       totalHarga: 26000,
       metodeBayar: 'Tunai',
       status: 'Selesai',
-      catatan: 'Lunas di kasir'
+      catatan: 'Kasir POS'
     }
   ]
 };
 
-// Storage manager: read or init localStorage
 function getLocalData(key) {
   const stored = localStorage.getItem(`zam_${key}`);
   if (stored) {

@@ -1,30 +1,60 @@
 /**
- * Konfigurasi Utama Depot Zam Water
- * Anda dapat mengubah GOOGLE_SCRIPT_URL setelah melakukan deployment Google Apps Script
+ * Konfigurasi Utama Depot Zam Water v2.0
+ * Nilai dapat diubah langsung dari menu Pengaturan (ikon gear) di Web App.
  */
 const CONFIG = {
-  // Masukkan URL Web App Google Apps Script hasil deploy Anda di sini:
-  // Contoh: 'https://script.google.com/macros/s/AKfycbx.../exec'
-  GOOGLE_SCRIPT_URL: localStorage.getItem('zam_gas_url') || 'https://script.google.com/macros/s/AKfycbwV4Z54ts1iVObGkh7B_RK4nTYbo4w6zaO-4r-AK0vQATFlPjcqQl8jTE-dDDTbG7da/exec',
+  // URL Web App Google Apps Script
+  GOOGLE_SCRIPT_URL: localStorage.getItem('zam_gas_url') || '',
 
-  // Informasi Depot Zam Water
-  DEPOT_NAME: 'Depot Zam Water',
+  // Informasi Depot & Owner / Admin
+  DEPOT_NAME: localStorage.getItem('zam_depot_name') || 'Depot Zam Water',
   DEPOT_TAGLINE: 'Air Minum Segar, Sehat & Higienis',
-  DEPOT_ADDRESS: 'Jl. Gunung Pancar sumur batu',
-  DEPOT_PHONE: '0878-5420-0275',
-  ADMIN_WA_NUMBER: '6285174273313', // Format 628xxx tanpa tanda + atau spasi
+  DEPOT_ADDRESS: localStorage.getItem('zam_depot_address') || 'Jl. Air Murni No. 12, Sidoarjo',
+  DEPOT_PHONE: localStorage.getItem('zam_depot_phone') || '0812-3456-7890',
+  ADMIN_NAME: localStorage.getItem('zam_admin_name') || 'H. Zamroni (Owner)',
+  ADMIN_WA_NUMBER: localStorage.getItem('zam_admin_phone') || '6281234567890',
 
-  // Rekening Bank Pembayaran
-  BANK_NAME: 'BCA',
-  BANK_ACCOUNT_NUMBER: '7475-179-986',
-  BANK_ACCOUNT_HOLDER: 'MUHAMMAD INAMMULLAH',
+  // Rekening Bank Pembayaran (BCA)
+  BANK_NAME: localStorage.getItem('zam_bank_name') || 'BCA',
+  BANK_ACCOUNT_NUMBER: localStorage.getItem('zam_bank_account') || '8290-128-449',
+  BANK_ACCOUNT_HOLDER: localStorage.getItem('zam_bank_holder') || 'Depot Zam Water Indonesia',
 
-  // QRIS Info
-  QRIS_NMID: 'ID1025368019960',
+  // Gambar Barcode QRIS Asli (Bisa diupload gambar asli lewat Pengaturan)
+  QRIS_IMAGE_URL: localStorage.getItem('zam_qris_image') || '',
+  QRIS_NMID: localStorage.getItem('zam_qris_nmid') || 'ID102008892110',
 
-  // Informasi Shift & Kasir Default
-  CASHIER_NAME: 'inam',
-  SHIFT_CODE: 'Shift #01 (Pagi/Siang)',
+  // Shift & Kapasitas Tangki
   TANK_CAPACITY_MAX: 5000,
-  CURRENT_TANK_LITERS: 3850
+  CURRENT_TANK_LITERS: 3850,
+
+  // Akun Login Default Sistem
+  USERS: [
+    {
+      id: 'usr_admin',
+      username: 'admin',
+      pin: '1234',
+      nama: 'H. Zamroni',
+      role: 'admin',
+      roleLabel: 'Admin / Pemilik',
+      avatarColor: 'bg-primary'
+    },
+    {
+      id: 'usr_kasir',
+      username: 'kasir',
+      pin: '1234',
+      nama: 'Budi Santoso',
+      role: 'kasir',
+      roleLabel: 'Kasir / Front Office',
+      avatarColor: 'bg-secondary'
+    },
+    {
+      id: 'usr_supir',
+      username: 'supir',
+      pin: '1234',
+      nama: 'Agus Priyanto',
+      role: 'supir',
+      roleLabel: 'Supir / Kurir Armada',
+      avatarColor: 'bg-tertiary'
+    }
+  ]
 };

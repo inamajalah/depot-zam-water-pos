@@ -1,7 +1,7 @@
 /**
- * API Service untuk Depot Zam Water
+ * API Service untuk Depot Zam Water v2.0
  * Terhubung ke Google Apps Script (doGet & doPost)
- * Fallback cerdas ke localStorage jika offline atau URL belum diatur
+ * Fallback otomatis ke localStorage jika offline atau belum ada koneksi
  */
 const API = {
   isConfigured() {
@@ -34,8 +34,8 @@ const API = {
 
       if (json.success && json.data) {
         // Simpan cache lokal
-        if (json.data.produk) setLocalData('produk', json.data.produk);
-        if (json.data.pelanggan) setLocalData('pelanggan', json.data.pelanggan);
+        if (json.data.produk && json.data.produk.length > 0) setLocalData('produk', json.data.produk);
+        if (json.data.pelanggan && json.data.pelanggan.length > 0) setLocalData('pelanggan', json.data.pelanggan);
         if (json.data.penjualan) setLocalData('penjualan', json.data.penjualan);
         if (json.data.laporanSupir) setLocalData('laporanSupir', json.data.laporanSupir);
         if (json.data.karyawan) setLocalData('karyawan', json.data.karyawan);
@@ -64,7 +64,7 @@ const API = {
    * Mengirim data ke Google Apps Script via doPost
    */
   async postAction(action, payload) {
-    // 1. Selalu perbarui lokal dulu (Optimistic UI / Offline First)
+    // 1. Optimistic update lokal
     this.updateLocalOptimistic(action, payload);
 
     if (!this.isConfigured()) {
@@ -75,7 +75,7 @@ const API = {
       const bodyData = JSON.stringify({ action, payload, timestamp: new Date().toISOString() });
       const response = await fetch(CONFIG.GOOGLE_SCRIPT_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Menghindari CORS preflight error di Apps Script
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: bodyData
       });
 
@@ -88,8 +88,8 @@ const API = {
       }
       return { success: true, source: 'google_sheets', result: resJson };
     } catch (err) {
-      console.warn('Gagal sinkronisasi Google Sheets secara live, disimpan di lokal:', err);
-      return { success: false, source: 'local', error: err.message, message: 'Disimpan di lokal (Gagal kirim ke Sheets)' };
+      console.warn('Gagal sinkronisasi Google Sheets live, disimpan di lokal:', err);
+      return { success: false, source: 'local', error: err.message, message: 'Disimpan di lokal' };
     }
   },
 
@@ -97,12 +97,25 @@ const API = {
    * Optimistic update untuk penyimpanan lokal
    */
   updateLocalOptimistic(action, payload) {
-    if (action === 'addPenjualan') {
+    if (action === 'saveProduct') {
+      const products = getLocalData('produk');
+      const idx = products.findIndex(p => p.id === payload.id);
+      if (idx >= 0) {
+        products[idx] = { ...products[idx], ...payload };
+      } else {
+        products.push(payload);
+      }
+      setLocalData('produk', products);
+    } else if (action === 'deleteProduct') {
+      let products = getLocalData('produk');
+      products = products.filter(p => p.id !== payload.id);
+      setLocalData('produk', products);
+    } else if (action === 'addPenjualan') {
       const sales = getLocalData('penjualan');
       sales.unshift(payload);
       setLocalData('penjualan', sales);
 
-      // Kurangi stok produk yang dibeli
+      // Kurangi stok di lokal
       if (Array.isArray(payload.itemsList)) {
         const products = getLocalData('produk');
         payload.itemsList.forEach(item => {

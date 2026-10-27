@@ -1,16 +1,16 @@
 /**
- * Depot Zam Water - Main Application Controller
- * Mengatur interaktivitas UI, kalkulasi POS, WhatsApp generator,
- * navigasi SPA, modal, dan sinkronisasi Google Sheets.
+ * Depot Zam Water - Main Application Controller v2.0
+ * Fitur Lengkap: POS, Stok, Supir, Payroll, Autentikasi Admin/Kasir/Supir,
+ * Tambah & Edit Produk, Pengaturan Rekening BCA & Upload Barcode QRIS Asli.
  */
 
-// State Aplikasi
+// State Utama Aplikasi
 const state = {
-  currentTab: 'pos',          // 'pos' | 'stok' | 'driver' | 'payroll'
+  currentTab: 'pos',
   activeCategory: 'all',
   customerSearchTerm: '',
   selectedCustomerCat: 'all',
-  stockTab: 'stok',           // 'stok' | 'cust'
+  stockTab: 'stok',
   cart: [
     { id: 'PROD-02', nama: 'Isi Ulang Galon RO', price: 8000, qty: 2 },
     { id: 'PROD-08', nama: 'Tisu Pembersih', price: 10000, qty: 1 }
@@ -24,13 +24,16 @@ const state = {
   driverReports: [],
   employees: [],
   sales: [],
-  isSyncing: false
+  isSyncing: false,
+
+  // Autentikasi Pengguna
+  currentUser: null
 };
 
-// Inisialisasi Aplikasi Saat Halaman Selesai Dimuat
+// Inisialisasi Saat Dokumen Dimuat
 document.addEventListener('DOMContentLoaded', async () => {
+  initAuth();
   setupNavigation();
-  setupSettingsModal();
   setupDriverCalculations();
   await loadInitialData();
   renderPOSProducts();
@@ -40,12 +43,117 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderDriverHistory();
   renderPayrollView();
   updateSyncIndicator();
+  updatePaymentDisplay();
   startQrisTimer();
 });
 
 /**
  * -------------------------------------------------------------
- * 1. Navigasi Single Page Application (SPA)
+ * 1. Sistem Autentikasi & Hak Akses (Admin / Kasir / Supir)
+ * -------------------------------------------------------------
+ */
+function initAuth() {
+  const savedUser = localStorage.getItem('zam_logged_user');
+  if (savedUser) {
+    try {
+      state.currentUser = JSON.parse(savedUser);
+    } catch (e) {
+      state.currentUser = CONFIG.USERS[0]; // Default ke Admin
+    }
+  } else {
+    // Default pertama kali login sebagai Admin
+    state.currentUser = CONFIG.USERS[0];
+    localStorage.setItem('zam_logged_user', JSON.stringify(state.currentUser));
+  }
+  updateAuthUI();
+}
+
+function updateAuthUI() {
+  const user = state.currentUser;
+  if (!user) return;
+
+  // Update badge user di header
+  const userRoleEl = document.getElementById('header-user-role');
+  const userNameEl = document.getElementById('header-user-name');
+  const userAvatarEl = document.getElementById('header-user-avatar');
+  const cashierShiftName = document.getElementById('pos-cashier-name');
+
+  if (userNameEl) userNameEl.textContent = user.nama;
+  if (userRoleEl) userRoleEl.textContent = user.roleLabel;
+  if (userAvatarEl) {
+    userAvatarEl.textContent = user.nama.slice(0, 2).toUpperCase();
+    userAvatarEl.className = `w-8 h-8 rounded-full ${user.avatarColor || 'bg-primary'} flex items-center justify-center text-on-primary font-bold text-xs`;
+  }
+  if (cashierShiftName) cashierShiftName.textContent = user.nama;
+
+  // Pengaturan visibilitas fitur berdasarkan peran
+  applyRolePermissions(user.role);
+}
+
+function applyRolePermissions(role) {
+  // Tombol tambah produk hanya untuk admin & kasir
+  const btnAddProd = document.querySelectorAll('.btn-add-product');
+  btnAddProd.forEach(btn => {
+    btn.style.display = (role === 'admin' || role === 'kasir') ? 'inline-flex' : 'none';
+  });
+
+  // Tombol settings hanya untuk admin
+  const btnSettings = document.getElementById('btn-header-settings');
+  if (btnSettings) {
+    btnSettings.title = role === 'admin' ? 'Pengaturan Depot (Admin)' : 'Pengaturan (Hanya Admin)';
+  }
+}
+
+function openLoginModal() {
+  const modal = document.getElementById('login-modal');
+  modal?.classList.remove('opacity-0', 'pointer-events-none');
+}
+
+function closeLoginModal() {
+  const modal = document.getElementById('login-modal');
+  modal?.classList.add('opacity-0', 'pointer-events-none');
+}
+
+function selectQuickLogin(role) {
+  const user = CONFIG.USERS.find(u => u.role === role);
+  if (user) {
+    document.getElementById('login-username').value = user.username;
+    document.getElementById('login-pin').value = user.pin;
+  }
+}
+
+function submitLogin(e) {
+  if (e) e.preventDefault();
+  const username = document.getElementById('login-username')?.value.trim().toLowerCase();
+  const pin = document.getElementById('login-pin')?.value.trim();
+
+  const found = CONFIG.USERS.find(u => u.username.toLowerCase() === username && u.pin === pin);
+  if (found) {
+    state.currentUser = found;
+    localStorage.setItem('zam_logged_user', JSON.stringify(found));
+    updateAuthUI();
+    closeLoginModal();
+    showToast(`Selamat datang, ${found.nama} (${found.roleLabel})`, 'verified_user');
+
+    // Arahkan ke tab sesuai peran jika supir
+    if (found.role === 'supir') {
+      switchView('driver');
+    }
+  } else {
+    showToast('Username atau PIN salah! (Coba: admin / 1234)', 'error');
+  }
+}
+
+function logoutUser() {
+  state.currentUser = CONFIG.USERS[1]; // fallback ke kasir
+  localStorage.setItem('zam_logged_user', JSON.stringify(state.currentUser));
+  updateAuthUI();
+  showToast('Beralih ke akun Kasir.', 'logout');
+}
+
+/**
+ * -------------------------------------------------------------
+ * 2. Navigasi Single Page Application (SPA)
  * -------------------------------------------------------------
  */
 function setupNavigation() {
@@ -58,7 +166,6 @@ function setupNavigation() {
     });
   });
 
-  // Dukungan deep link via Hash (#pos, #stok, #driver, #payroll)
   const initialHash = window.location.hash.replace('#', '');
   if (['pos', 'stok', 'driver', 'payroll'].includes(initialHash)) {
     switchView(initialHash);
@@ -66,22 +173,25 @@ function setupNavigation() {
 }
 
 function switchView(tabName) {
+  // Proteksi Hak Akses untuk Slip Gaji (Hanya Admin)
+  if (tabName === 'payroll' && state.currentUser && state.currentUser.role !== 'admin') {
+    showToast('Akses Terbatas: Hanya Admin / Owner yang dapat mengakses Slip Gaji!', 'lock');
+    return;
+  }
+
   state.currentTab = tabName;
   window.location.hash = tabName;
 
-  // Sembunyikan semua view
   document.querySelectorAll('.app-view').forEach(view => {
     view.classList.add('hidden');
   });
 
-  // Tampilkan view aktif
   const targetView = document.getElementById(`view-${tabName}`);
   if (targetView) {
     targetView.classList.remove('hidden');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  // Update styling navigasi bawah
   document.querySelectorAll('.bottom-nav-item').forEach(item => {
     const isCurrent = item.dataset.tab === tabName;
     if (isCurrent) {
@@ -93,7 +203,6 @@ function switchView(tabName) {
     }
   });
 
-  // Update header title
   const headerSubtitle = document.getElementById('header-subtitle');
   if (headerSubtitle) {
     const titles = {
@@ -108,7 +217,7 @@ function switchView(tabName) {
 
 /**
  * -------------------------------------------------------------
- * 2. Memuat & Sinkronisasi Data
+ * 3. Memuat Data & Sinkronisasi
  * -------------------------------------------------------------
  */
 async function loadInitialData() {
@@ -143,15 +252,9 @@ function updateSyncIndicator(source) {
   }
 
   if (API.isConfigured()) {
-    if (source === 'google_sheets') {
-      text.textContent = 'Google Sheets Live';
-      dot.className = 'w-2 h-2 rounded-full bg-primary animate-pulse';
-      indicator.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-label-sm font-label-sm cursor-pointer border border-primary/20';
-    } else {
-      text.textContent = 'Sheets Terhubung';
-      dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
-      indicator.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-label-sm font-label-sm cursor-pointer border border-emerald-200';
-    }
+    text.textContent = 'Google Sheets Live';
+    dot.className = 'w-2 h-2 rounded-full bg-primary animate-pulse';
+    indicator.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-label-sm font-label-sm cursor-pointer border border-primary/20';
   } else {
     text.textContent = 'Mode Demo (Offline)';
     dot.className = 'w-2 h-2 rounded-full bg-sky-500';
@@ -161,7 +264,7 @@ function updateSyncIndicator(source) {
 
 /**
  * -------------------------------------------------------------
- * 3. Modul POS (Kasir)
+ * 4. Modul Kasir (POS) & Pembayaran Dinamis (BCA + QRIS)
  * -------------------------------------------------------------
  */
 function renderPOSProducts() {
@@ -173,10 +276,17 @@ function renderPOSProducts() {
     : state.products.filter(p => p.kategori === state.activeCategory);
 
   container.innerHTML = filtered.map(prod => `
-    <div class="product-item bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col justify-between transition-all active:scale-[0.98] border border-surface-container-high/40 hover:shadow-md">
+    <div class="product-item bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col justify-between transition-all border border-surface-container-high/40 hover:shadow-md relative group">
+      <!-- Tombol Edit Cepat Produk untuk Admin -->
+      ${state.currentUser?.role === 'admin' ? `
+        <button onclick="openEditProductModal('${prod.id}')" class="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-surface-container-lowest/90 backdrop-blur-sm text-outline hover:text-primary flex items-center justify-center shadow-xs" title="Edit Produk Ini">
+          <span class="material-symbols-outlined text-[16px]">edit</span>
+        </button>
+      ` : ''}
+
       <div class="relative w-full aspect-square rounded-lg overflow-hidden bg-surface-container-low mb-2">
-        <img class="w-full h-full object-cover transition-transform duration-300 hover:scale-105" 
-             src="${prod.gambar}" 
+        <img class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+             src="${prod.gambar || 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=400&auto=format&fit=crop&q=60'}" 
              alt="${prod.nama}"
              onerror="this.src='https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=400&auto=format&fit=crop&q=60';"/>
         <span class="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full ${prod.badgeColor === 'error' ? 'bg-error text-on-error' : 'bg-surface-container-lowest/95 text-primary'} backdrop-blur-sm font-label-sm text-[11px] font-semibold shadow-xs">
@@ -228,7 +338,7 @@ function addToCart(productId) {
     });
   }
   renderCart();
-  showToast(`+1 ${prod.nama} ditambahkan ke keranjang`, 'shopping_cart');
+  showToast(`+1 ${prod.nama}`, 'shopping_cart');
 }
 
 function updateCartQty(index, delta) {
@@ -264,7 +374,6 @@ function renderCart() {
   if (subtotalEl) subtotalEl.textContent = `Rp ${totalAmount.toLocaleString('id-ID')}`;
   if (totalEl) totalEl.textContent = `Rp ${totalAmount.toLocaleString('id-ID')}`;
 
-  // Update uang pas & kembalian
   const change = Math.max(0, state.nominalReceived - totalAmount);
   if (kembalianEl) kembalianEl.textContent = `Rp ${change.toLocaleString('id-ID')}`;
 
@@ -273,7 +382,7 @@ function renderCart() {
   if (state.cart.length === 0) {
     container.innerHTML = `
       <div class="py-8 text-center text-outline flex flex-col items-center justify-center">
-        <span class="material-symbols-outlined text-[36px] mb-2 text-outline/60">shopping_cart_off</span>
+        <span class="material-symbols-outlined text-[36px] mb-2 text-outline/50">shopping_cart_off</span>
         <p class="font-body-sm">Keranjang masih kosong</p>
         <p class="text-[11px] text-outline/80">Pilih produk di atas untuk memulai transaksi</p>
       </div>
@@ -323,7 +432,6 @@ function switchPayTab(type) {
     activeTabBtn.classList.add('bg-primary', 'text-on-primary');
   }
 
-  // Toggle pane visibility
   ['cash', 'qris', 'transfer'].forEach(pane => {
     const el = document.getElementById(`content-${pane}`);
     if (el) {
@@ -346,7 +454,6 @@ function selectNominal(nominal, btn) {
     state.nominalReceived = Number(nominal);
   }
 
-  // Visual feedback for buttons
   document.querySelectorAll('.denom-btn').forEach(b => {
     b.classList.remove('bg-secondary-fixed', 'text-on-secondary-fixed');
     b.classList.add('bg-surface-container-high', 'text-on-surface');
@@ -363,8 +470,46 @@ function selectNominal(nominal, btn) {
   }
 }
 
+/**
+ * Update Tampilan Rekening BCA dan Gambar Barcode QRIS Asli di POS
+ */
+function updatePaymentDisplay() {
+  // Update Bank Info
+  const bankNameEl = document.getElementById('pos-bank-name');
+  const bankAccEl = document.getElementById('pos-bank-account');
+  const bankHolderEl = document.getElementById('pos-bank-holder');
+  if (bankNameEl) bankNameEl.textContent = CONFIG.BANK_NAME || 'BCA';
+  if (bankAccEl) bankAccEl.textContent = CONFIG.BANK_ACCOUNT_NUMBER || '8290-128-449';
+  if (bankHolderEl) bankHolderEl.textContent = `a.n ${CONFIG.BANK_ACCOUNT_HOLDER || 'Depot Zam Water Indonesia'}`;
+
+  // Update QRIS Container
+  const qrisContainer = document.getElementById('pos-qris-container');
+  const qrisNmidEl = document.getElementById('pos-qris-nmid');
+  if (qrisNmidEl) qrisNmidEl.textContent = `NMID: ${CONFIG.QRIS_NMID || 'ID102008892110'}`;
+
+  if (qrisContainer) {
+    if (CONFIG.QRIS_IMAGE_URL) {
+      // Tampilkan Gambar Barcode QRIS Asli yang diupload pengguna!
+      qrisContainer.innerHTML = `
+        <div class="relative w-44 h-44 bg-white p-2 rounded-xl shadow-inner border border-surface-container/60 flex items-center justify-center">
+          <img src="${CONFIG.QRIS_IMAGE_URL}" alt="Barcode QRIS Depot Zam Water" class="w-full h-full object-contain rounded-lg"/>
+        </div>
+      `;
+    } else {
+      // Tampilkan SVG barcode dummy jika belum diupload
+      qrisContainer.innerHTML = `
+        <div class="p-3 bg-surface-container-lowest rounded-xl shadow-inner mb-2 border border-surface-container/60">
+          <svg class="w-36 h-36" fill="currentColor" viewBox="0 0 100 100">
+            <path d="M10 10h24v24H10zM14 14v16h16V14zm4 4h8v8h-8zM66 10h24v24H66zM70 14v16h16V14zm4 4h8v8h-8zM10 66h24v24H10zM14 70v16h16V70zm4 4h8v8h-8zM42 12h6v6h-6zm10 0h6v6h-6zm-10 10h6v6h-6zm10 0h6v6h-6zm-10 10h6v6h-6zm10 10h6v6h-6zm10-10h6v6h-6zm10 10h6v6h-6zm-10 10h6v6h-6zm10 10h6v6h-6zm-20 0h6v6h-6zm-10 0h6v6h-6zm-10 10h6v6h-6zm20 10h6v6h-6zm10 10h6v6h-6zm10 0h6v6h-6zm10-10h6v6h-6zm0 10h6v6h-6z" fill="#00685f"></path>
+          </svg>
+        </div>
+      `;
+    }
+  }
+}
+
 function copyRekening(btn) {
-  const noRek = CONFIG.BANK_ACCOUNT_NUMBER.replace(/-/g, '');
+  const noRek = (CONFIG.BANK_ACCOUNT_NUMBER || '8290-128-449').replace(/[^0-9]/g, '');
   navigator.clipboard?.writeText(noRek);
   btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">done</span><span>Tersalin</span>';
   setTimeout(() => {
@@ -386,7 +531,7 @@ function populateCustomerSelect() {
 }
 
 function startQrisTimer() {
-  let seconds = 300; // 5 menit
+  let seconds = 300;
   const timerEl = document.getElementById('qris-timer');
   setInterval(() => {
     if (!timerEl) return;
@@ -398,7 +543,7 @@ function startQrisTimer() {
 }
 
 /**
- * Eksekusi Bayar & Simpan Transaksi POS
+ * Transaksi POS & Cetak Struk
  */
 async function processPaymentAndOpenReceipt() {
   if (state.cart.length === 0) {
@@ -419,45 +564,43 @@ async function processPaymentAndOpenReceipt() {
     items: state.cart.map(c => `${c.qty}x ${c.nama}`).join(', '),
     itemsList: [...state.cart],
     totalHarga: totalAmount,
-    metodeBayar: state.payMethod === 'cash' ? 'Tunai' : (state.payMethod === 'qris' ? 'QRIS' : 'Transfer BCA'),
+    metodeBayar: state.payMethod === 'cash' ? 'Tunai' : (state.payMethod === 'qris' ? 'QRIS' : `Transfer ${CONFIG.BANK_NAME || 'BCA'}`),
     status: 'Selesai',
-    catatan: 'Kasir POS'
+    catatan: `Kasir: ${state.currentUser?.nama || 'Budi Santoso'}`
   };
 
-  // Simpan via API
-  showToast('Memproses transaksi...', 'sync');
+  showToast('Memproses transaksi POS...', 'sync');
   await API.postAction('addPenjualan', saleRecord);
 
-  // Render modal thermal receipt
   populateThermalReceipt(saleRecord);
   openReceiptModal();
 
-  // Bersihkan keranjang dan perbarui tampilan stok
   state.cart = [];
   renderCart();
   await loadInitialData();
   renderPOSProducts();
+  renderStockView();
 }
 
 function populateThermalReceipt(sale) {
   const now = new Date();
   const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   
-  const receiptDate = document.getElementById('receipt-date');
-  const receiptNo = document.getElementById('receipt-no');
-  const receiptCustomer = document.getElementById('receipt-customer');
+  const receiptDepotName = document.getElementById('receipt-depot-name');
+  const receiptDepotAddress = document.getElementById('receipt-depot-address');
+  const receiptDepotPhone = document.getElementById('receipt-depot-phone');
+
+  if (receiptDepotName) receiptDepotName.textContent = CONFIG.DEPOT_NAME || 'DEPOT ZAM WATER';
+  if (receiptDepotAddress) receiptDepotAddress.textContent = CONFIG.DEPOT_ADDRESS || 'Jl. Air Murni No. 12, Sidoarjo';
+  if (receiptDepotPhone) receiptDepotPhone.textContent = `Telp/WA: ${CONFIG.DEPOT_PHONE || '0812-3456-7890'}`;
+
+  document.getElementById('receipt-date').textContent = dateStr;
+  document.getElementById('receipt-no').textContent = sale.id;
+  document.getElementById('receipt-customer').textContent = `Cust: ${sale.pelanggan}`;
+  document.getElementById('receipt-cashier').textContent = `Kasir: ${state.currentUser?.nama || 'Budi'}`;
+  document.getElementById('receipt-pay-method').textContent = `Bayar (${sale.metodeBayar})`;
+
   const receiptItems = document.getElementById('receipt-line-items');
-  const receiptSubtotal = document.getElementById('receipt-subtotal');
-  const receiptTotal = document.getElementById('receipt-total');
-  const receiptPaid = document.getElementById('receipt-paid-amount');
-  const receiptChange = document.getElementById('receipt-change-amount');
-  const receiptMethod = document.getElementById('receipt-pay-method');
-
-  if (receiptDate) receiptDate.textContent = dateStr;
-  if (receiptNo) receiptNo.textContent = sale.id;
-  if (receiptCustomer) receiptCustomer.textContent = `Cust: ${sale.pelanggan}`;
-  if (receiptMethod) receiptMethod.textContent = `Bayar (${sale.metodeBayar})`;
-
   if (receiptItems && sale.itemsList) {
     receiptItems.innerHTML = sale.itemsList.map(item => `
       <div class="flex justify-between">
@@ -468,33 +611,29 @@ function populateThermalReceipt(sale) {
     `).join('');
   }
 
-  if (receiptSubtotal) receiptSubtotal.textContent = `Rp ${sale.totalHarga.toLocaleString('id-ID')}`;
-  if (receiptTotal) receiptTotal.textContent = `Rp ${sale.totalHarga.toLocaleString('id-ID')}`;
+  document.getElementById('receipt-subtotal').textContent = `Rp ${sale.totalHarga.toLocaleString('id-ID')}`;
+  document.getElementById('receipt-total').textContent = `Rp ${sale.totalHarga.toLocaleString('id-ID')}`;
   
   const paidVal = state.payMethod === 'cash' ? Math.max(sale.totalHarga, state.nominalReceived) : sale.totalHarga;
   const changeVal = Math.max(0, paidVal - sale.totalHarga);
-  if (receiptPaid) receiptPaid.textContent = `Rp ${paidVal.toLocaleString('id-ID')}`;
-  if (receiptChange) receiptChange.textContent = `Rp ${changeVal.toLocaleString('id-ID')}`;
+  document.getElementById('receipt-paid-amount').textContent = `Rp ${paidVal.toLocaleString('id-ID')}`;
+  document.getElementById('receipt-change-amount').textContent = `Rp ${changeVal.toLocaleString('id-ID')}`;
 }
 
 function openReceiptModal() {
   const modal = document.getElementById('receipt-modal');
   const card = document.getElementById('receipt-card');
-  if (modal && card) {
-    modal.classList.remove('opacity-0', 'pointer-events-none');
-    card.classList.remove('scale-95');
-    card.classList.add('scale-100');
-  }
+  modal?.classList.remove('opacity-0', 'pointer-events-none');
+  card?.classList.remove('scale-95');
+  card?.classList.add('scale-100');
 }
 
 function closeReceiptModal() {
   const modal = document.getElementById('receipt-modal');
   const card = document.getElementById('receipt-card');
-  if (modal && card) {
-    modal.classList.add('opacity-0', 'pointer-events-none');
-    card.classList.remove('scale-100');
-    card.classList.add('scale-95');
-  }
+  modal?.classList.add('opacity-0', 'pointer-events-none');
+  card?.classList.remove('scale-100');
+  card?.classList.add('scale-95');
 }
 
 function printThermalReceipt() {
@@ -506,14 +645,180 @@ function printThermalReceipt() {
 function shareReceiptWA() {
   const total = document.getElementById('receipt-total')?.textContent || '';
   const no = document.getElementById('receipt-no')?.textContent || '';
-  const msg = encodeURIComponent(`*STRUK PEMBAYARAN DEPOT ZAM WATER*\nNo: ${no}\nTotal: ${total}\nStatus: LUNAS\nTerima kasih atas kunjungan Anda!`);
+  const msg = encodeURIComponent(`*STRUK PEMBAYARAN ${CONFIG.DEPOT_NAME || 'DEPOT ZAM WATER'}*\nNo: ${no}\nTotal: ${total}\nStatus: LUNAS\nTerima kasih atas kunjungan Anda!`);
   window.open(`https://wa.me/?text=${msg}`, '_blank');
   closeReceiptModal();
 }
 
 /**
  * -------------------------------------------------------------
- * 4. Modul Stok & Pelanggan
+ * 5. Fitur Tambah & Edit Produk (Real-Time ke Sheets)
+ * -------------------------------------------------------------
+ */
+let currentProductImageBase64 = '';
+
+function openAddProductModal() {
+  // Hanya admin atau kasir yang bisa menambah produk
+  if (state.currentUser?.role === 'supir') {
+    showToast('Akses ditolak: Hanya Admin/Kasir yang dapat mengelola produk', 'error');
+    return;
+  }
+
+  document.getElementById('product-modal-title').textContent = 'Tambah Produk Baru';
+  document.getElementById('prod-id').value = '';
+  document.getElementById('prod-name').value = '';
+  document.getElementById('prod-category').value = 'refill';
+  document.getElementById('prod-price').value = '';
+  document.getElementById('prod-stock').value = '50';
+  document.getElementById('prod-unit').value = 'Galon';
+  document.getElementById('prod-subtext').value = '';
+  document.getElementById('prod-badge').value = 'Tersedia';
+  document.getElementById('prod-image-url').value = '';
+  currentProductImageBase64 = '';
+
+  const preview = document.getElementById('prod-image-preview');
+  if (preview) {
+    preview.src = 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=400&auto=format&fit=crop&q=60';
+  }
+
+  // Sembunyikan tombol hapus jika tambah baru
+  const btnDelete = document.getElementById('btn-delete-product');
+  if (btnDelete) btnDelete.classList.add('hidden');
+
+  const modal = document.getElementById('product-modal');
+  modal?.classList.remove('opacity-0', 'pointer-events-none');
+}
+
+function openEditProductModal(productId) {
+  const prod = state.products.find(p => p.id === productId);
+  if (!prod) return;
+
+  document.getElementById('product-modal-title').textContent = 'Edit Data Produk';
+  document.getElementById('prod-id').value = prod.id;
+  document.getElementById('prod-name').value = prod.nama || '';
+  document.getElementById('prod-category').value = prod.kategori || 'refill';
+  document.getElementById('prod-price').value = prod.harga || '';
+  document.getElementById('prod-stock').value = prod.stok !== undefined ? prod.stok : '0';
+  document.getElementById('prod-unit').value = prod.satuan || 'Galon';
+  document.getElementById('prod-subtext').value = prod.subtext || '';
+  document.getElementById('prod-badge').value = prod.badge || 'Tersedia';
+  document.getElementById('prod-image-url').value = prod.gambar && !prod.gambar.startsWith('data:') ? prod.gambar : '';
+  currentProductImageBase64 = prod.gambar || '';
+
+  const preview = document.getElementById('prod-image-preview');
+  if (preview) {
+    preview.src = prod.gambar || 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=400&auto=format&fit=crop&q=60';
+  }
+
+  // Tampilkan tombol hapus produk untuk Admin
+  const btnDelete = document.getElementById('btn-delete-product');
+  if (btnDelete) {
+    btnDelete.classList.remove('hidden');
+  }
+
+  const modal = document.getElementById('product-modal');
+  modal?.classList.remove('opacity-0', 'pointer-events-none');
+}
+
+function closeProductModal() {
+  const modal = document.getElementById('product-modal');
+  modal?.classList.add('opacity-0', 'pointer-events-none');
+}
+
+function handleProductImageUpload(input) {
+  if (input.files && input.files[0]) {
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      currentProductImageBase64 = e.target.result;
+      const preview = document.getElementById('prod-image-preview');
+      if (preview) preview.src = currentProductImageBase64;
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
+async function saveProductSubmit(e) {
+  if (e) e.preventDefault();
+  const id = document.getElementById('prod-id')?.value.trim();
+  const nama = document.getElementById('prod-name')?.value.trim();
+  const kategori = document.getElementById('prod-category')?.value;
+  const harga = parseInt(document.getElementById('prod-price')?.value || '0', 10);
+  const stok = parseInt(document.getElementById('prod-stock')?.value || '0', 10);
+  const satuan = document.getElementById('prod-unit')?.value.trim() || 'Galon';
+  const subtext = document.getElementById('prod-subtext')?.value.trim();
+  const badge = document.getElementById('prod-badge')?.value.trim() || 'Tersedia';
+  const manualUrl = document.getElementById('prod-image-url')?.value.trim();
+
+  if (!nama || isNaN(harga)) {
+    showToast('Nama dan harga produk wajib diisi!', 'error');
+    return;
+  }
+
+  const kategoriLabels = {
+    'refill': 'Isi Ulang Galon',
+    'new-gallon': 'Galon Baru',
+    'bottles': 'Botol & Dus',
+    'accessories': 'Aksesoris'
+  };
+
+  const finalImage = currentProductImageBase64 || manualUrl || 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=400&auto=format&fit=crop&q=60';
+  const finalId = id || (`PROD-${String(Date.now()).slice(-6)}`);
+
+  const productPayload = {
+    id: finalId,
+    nama,
+    kategori,
+    kategoriLabel: kategoriLabels[kategori] || 'Lainnya',
+    harga,
+    stok,
+    satuan,
+    subtext,
+    badge,
+    badgeColor: stok <= 15 ? 'error' : (badge === 'Favorit' ? 'tertiary-fixed' : 'primary'),
+    gambar: finalImage
+  };
+
+  showToast('Menyimpan produk ke Google Sheets...', 'sync');
+  closeProductModal();
+
+  await API.postAction('saveProduct', productPayload);
+
+  // Perbarui state lokal
+  const idx = state.products.findIndex(p => p.id === finalId);
+  if (idx >= 0) {
+    state.products[idx] = productPayload;
+  } else {
+    state.products.push(productPayload);
+  }
+
+  renderPOSProducts();
+  renderStockView();
+  showToast(`Produk "${nama}" berhasil disimpan!`, 'check_circle');
+}
+
+async function deleteProductSubmit() {
+  const id = document.getElementById('prod-id')?.value.trim();
+  if (!id) return;
+
+  if (!confirm('Apakah Anda yakin ingin menghapus produk ini dari katalog dan Google Sheets?')) {
+    return;
+  }
+
+  showToast('Menghapus produk...', 'delete');
+  closeProductModal();
+
+  await API.postAction('deleteProduct', { id });
+  state.products = state.products.filter(p => p.id !== id);
+
+  renderPOSProducts();
+  renderStockView();
+  showToast('Produk berhasil dihapus.', 'check_circle');
+}
+
+/**
+ * -------------------------------------------------------------
+ * 6. Modul Stok & Pelanggan
  * -------------------------------------------------------------
  */
 function switchStockTab(type) {
@@ -541,7 +846,6 @@ function switchStockTab(type) {
 }
 
 function renderStockView() {
-  // Hitung total stok galon terisi
   const ro = state.products.find(p => p.id === 'PROD-02');
   const min = state.products.find(p => p.id === 'PROD-01');
   const tutup = state.products.find(p => p.id === 'PROD-07');
@@ -558,6 +862,38 @@ function renderStockView() {
 
   const tutupStockEl = document.getElementById('stock-tutup-val');
   if (tutupStockEl && tutup) tutupStockEl.textContent = tutup.stok;
+
+  // Render list inventaris dinamis
+  const inventoryList = document.getElementById('inventory-items-container');
+  if (inventoryList) {
+    inventoryList.innerHTML = state.products.map(prod => `
+      <div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container-high/60 hover:shadow-md transition-shadow">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0 overflow-hidden">
+            <img src="${prod.gambar || 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=400&auto=format&fit=crop&q=60'}" class="w-full h-full object-cover" onerror="this.src='https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=400&auto=format&fit=crop&q=60';"/>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h4 class="font-label-md text-label-md text-on-surface font-semibold truncate">${prod.nama}</h4>
+              <span class="inline-flex items-center px-1.5 py-0.2 rounded-full ${prod.stok <= 15 ? 'bg-error-container text-on-error-container' : 'bg-tertiary-fixed text-on-tertiary-fixed'} text-[10px] font-bold">
+                ${prod.stok <= 15 ? 'Menipis' : 'Aman'}
+              </span>
+            </div>
+            <p class="font-body-sm text-body-sm text-outline truncate">${prod.subtext || prod.kategoriLabel} • Rp ${Number(prod.harga).toLocaleString('id-ID')}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+          <div class="text-right">
+            <span class="font-pos-numeral-md text-pos-numeral-md text-primary block leading-tight font-bold">${prod.stok}</span>
+            <span class="font-label-sm text-[11px] text-outline">${prod.satuan || 'Pcs'}</span>
+          </div>
+          <button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-primary hover:bg-primary hover:text-on-primary transition-colors" onclick="openEditProductModal('${prod.id}')" title="Edit Data & Stok">
+            <span class="material-symbols-outlined text-[18px]">edit</span>
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
 }
 
 let quickWashVal = 5;
@@ -581,55 +917,13 @@ async function applyQuickWash() {
   adjustQuickWash(0);
 }
 
-function openEditStockModal(prodId) {
-  const prod = state.products.find(p => p.id === prodId);
-  if (!prod) return;
-
-  const nameInput = document.getElementById('modal-stock-name');
-  const qtyInput = document.getElementById('modal-stock-qty');
-  const idInput = document.getElementById('modal-stock-id');
-
-  if (nameInput) nameInput.value = prod.nama;
-  if (qtyInput) qtyInput.value = prod.stok;
-  if (idInput) idInput.value = prod.id;
-
-  const modal = document.getElementById('stock-modal');
-  modal?.classList.remove('opacity-0', 'pointer-events-none');
-}
-
-function closeEditStockModal() {
-  const modal = document.getElementById('stock-modal');
-  modal?.classList.add('opacity-0', 'pointer-events-none');
-}
-
-async function saveStockUpdate() {
-  const idInput = document.getElementById('modal-stock-id');
-  const qtyInput = document.getElementById('modal-stock-qty');
-  if (!idInput || !qtyInput) return;
-
-  const prodId = idInput.value;
-  const newStok = parseInt(qtyInput.value, 10);
-  if (isNaN(newStok)) return;
-
-  showToast('Memperbarui stok...', 'sync');
-  await API.postAction('updateStok', { id: prodId, stok: newStok });
-  
-  const prod = state.products.find(p => p.id === prodId);
-  if (prod) prod.stok = newStok;
-
-  closeEditStockModal();
-  renderStockView();
-  renderPOSProducts();
-  showToast('Stok berhasil diperbarui!', 'check_circle');
-}
-
 function renderCustomerList() {
   const container = document.getElementById('customer-list-container');
   if (!container) return;
 
   let filtered = state.customers;
   if (state.selectedCustomerCat !== 'all') {
-    filtered = filtered.filter(c => c.kategori.toLowerCase().includes(state.selectedCustomerCat.toLowerCase()));
+    filtered = filtered.filter(c => c.kategori?.toLowerCase().includes(state.selectedCustomerCat.toLowerCase()));
   }
   if (state.customerSearchTerm) {
     const term = state.customerSearchTerm.toLowerCase();
@@ -712,9 +1006,7 @@ function renderCustomerList() {
 
 function filterCustomers() {
   const searchInput = document.getElementById('input-search-cust');
-  if (searchInput) {
-    state.customerSearchTerm = searchInput.value;
-  }
+  if (searchInput) state.customerSearchTerm = searchInput.value;
   renderCustomerList();
 }
 
@@ -741,9 +1033,7 @@ function clearCustSearch() {
 function createOrderForCustomer(customerName) {
   switchView('pos');
   const select = document.getElementById('pos-customer-select');
-  if (select) {
-    select.value = customerName;
-  }
+  if (select) select.value = customerName;
   showToast(`Pesanan untuk ${customerName} disiapkan di POS`, 'shopping_cart');
 }
 
@@ -794,7 +1084,7 @@ async function saveNewCustomer() {
 
 /**
  * -------------------------------------------------------------
- * 5. Modul Portal Laporan Supir
+ * 7. Modul Portal Laporan Supir
  * -------------------------------------------------------------
  */
 function setupDriverCalculations() {
@@ -835,13 +1125,10 @@ function updateDriverCalculations() {
   const bensinRaw = document.getElementById('klaimBensin')?.value || '0';
   const catatan = document.getElementById('catatanKendala')?.value || '';
 
-  const tunaiClean = tunaiRaw.replace(/[^0-9]/g, '');
-  const bensinClean = bensinRaw.replace(/[^0-9]/g, '');
-
-  const tunai = parseInt(tunaiClean || '0', 10);
-  const bensin = parseInt(bensinClean || '0', 10);
-
+  const tunai = parseInt(tunaiRaw.replace(/[^0-9]/g, '') || '0', 10);
+  const bensin = parseInt(bensinRaw.replace(/[^0-9]/g, '') || '0', 10);
   const selisih = Math.max(0, keluar - kembali);
+
   const selisihBadge = document.getElementById('selisihBadge');
   const selisihInfo = document.getElementById('selisihInfo');
 
@@ -865,12 +1152,11 @@ function updateDriverCalculations() {
     }
   }
 
-  // Generate WA Message Template
   const now = new Date();
   const dateFormatted = `${now.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][now.getMonth()]} ${now.getFullYear()}`;
-  const driverName = 'Budi Santoso (Armada 01)';
+  const driverName = state.currentUser?.nama || 'Budi Santoso (Armada 01)';
   
-  const textMsg = `Halo Admin Zam Water, berikut Laporan Driver:
+  const textMsg = `Halo Admin ${CONFIG.DEPOT_NAME || 'Zam Water'}, berikut Laporan Driver:
 Nama: ${driverName}
 Tanggal: ${dateFormatted}
 Galon Keluar: ${keluar} | Galon Kembali: ${kembali} ${selisih > 0 ? `(Selisih: ${selisih})` : ''}
@@ -909,7 +1195,7 @@ async function saveDriverShift() {
   const report = {
     id: `TRIP-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`,
     waktu: `${now.getDate()} Mei 2024 • ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} WIB`,
-    namaSupir: 'Budi Santoso',
+    namaSupir: state.currentUser?.nama || 'Budi Santoso',
     armada: 'Motor Roda 3 Tossa B-4921-ZAM',
     tujuan: 'Trip Selesai Pengantaran',
     galonKeluar: keluar,
@@ -970,7 +1256,7 @@ function renderDriverHistory() {
 
 /**
  * -------------------------------------------------------------
- * 6. Modul Slip Gaji Karyawan
+ * 8. Modul Slip Gaji Karyawan
  * -------------------------------------------------------------
  */
 function renderPayrollView() {
@@ -1054,31 +1340,28 @@ function openSlipModal(key) {
   document.getElementById('modal-allowance-pay').textContent = `Rp ${Number(emp.tunjangan || 0).toLocaleString('id-ID')}`;
   document.getElementById('modal-total-pay').textContent = `Rp ${Number(emp.totalGaji).toLocaleString('id-ID')}`;
   document.getElementById('modal-sign-emp').textContent = emp.nama;
+  document.getElementById('modal-sign-owner').textContent = CONFIG.ADMIN_NAME || 'H. Zamroni (Owner)';
 
   const modal = document.getElementById('slip-modal');
   const card = document.getElementById('slip-card-content');
-  if (modal && card) {
-    modal.classList.remove('opacity-0', 'pointer-events-none');
-    modal.classList.add('opacity-100');
-    card.classList.remove('translate-y-8');
-    card.classList.add('translate-y-0');
-  }
+  modal?.classList.remove('opacity-0', 'pointer-events-none');
+  modal?.classList.add('opacity-100');
+  card?.classList.remove('translate-y-8');
+  card?.classList.add('translate-y-0');
 }
 
 function closeSlipModal() {
   const modal = document.getElementById('slip-modal');
   const card = document.getElementById('slip-card-content');
-  if (modal && card) {
-    modal.classList.add('opacity-0', 'pointer-events-none');
-    modal.classList.remove('opacity-100');
-    card.classList.add('translate-y-8');
-    card.classList.remove('translate-y-0');
-  }
+  modal?.classList.add('opacity-0', 'pointer-events-none');
+  modal?.classList.remove('opacity-100');
+  card?.classList.add('translate-y-8');
+  card?.classList.remove('translate-y-0');
 }
 
 function shareSlipWA(key) {
   const emp = state.employees.find(e => e.key === key || e.id === key) || state.employees[0];
-  const msg = encodeURIComponent(`*SLIP GAJI DIGITAL - DEPOT ZAM WATER*\nPeriode: Mei 2024\nNama: ${emp.nama}\nJabatan: ${emp.jabatan}\nGaji Pokok: Rp ${Number(emp.gajiPokok).toLocaleString('id-ID')}\nBonus: Rp ${Number(emp.bonus).toLocaleString('id-ID')}\n*Total Diterima: Rp ${Number(emp.totalGaji).toLocaleString('id-ID')}*\nStatus: ${emp.statusBayar || 'Lunas'}`);
+  const msg = encodeURIComponent(`*SLIP GAJI DIGITAL - ${CONFIG.DEPOT_NAME || 'DEPOT ZAM WATER'}*\nPeriode: Mei 2024\nNama: ${emp.nama}\nJabatan: ${emp.jabatan}\nGaji Pokok: Rp ${Number(emp.gajiPokok).toLocaleString('id-ID')}\nBonus: Rp ${Number(emp.bonus).toLocaleString('id-ID')}\n*Total Diterima: Rp ${Number(emp.totalGaji).toLocaleString('id-ID')}*\nStatus: ${emp.statusBayar || 'Lunas'}`);
   window.open(`https://wa.me/?text=${msg}`, '_blank');
 }
 
@@ -1113,25 +1396,94 @@ async function triggerBatchPayout() {
 
 /**
  * -------------------------------------------------------------
- * 7. Modal Pengaturan API Google Sheets
+ * 9. Modal Pengaturan (BCA, QRIS, Admin Name, Google Sheets API)
  * -------------------------------------------------------------
  */
-function setupSettingsModal() {
-  const inputUrl = document.getElementById('settings-gas-url');
-  const inputPhone = document.getElementById('settings-admin-phone');
-  if (inputUrl) inputUrl.value = CONFIG.GOOGLE_SCRIPT_URL;
-  if (inputPhone) inputPhone.value = CONFIG.ADMIN_WA_NUMBER;
-}
+let tempQrisImageBase64 = '';
 
 function openSettingsModal() {
+  // Hanya admin yang bisa membuka pengaturan lengkap
+  if (state.currentUser?.role !== 'admin') {
+    showToast('Akses terbatas: Pengaturan sistem hanya dapat diubah oleh Admin', 'lock');
+    return;
+  }
+
+  // Isi data ke input form
+  document.getElementById('settings-gas-url').value = CONFIG.GOOGLE_SCRIPT_URL || '';
+  document.getElementById('settings-admin-name').value = CONFIG.ADMIN_NAME || 'H. Zamroni';
+  document.getElementById('settings-admin-phone').value = CONFIG.ADMIN_WA_NUMBER || '6281234567890';
+  document.getElementById('settings-depot-name').value = CONFIG.DEPOT_NAME || 'Depot Zam Water';
+  document.getElementById('settings-depot-address').value = CONFIG.DEPOT_ADDRESS || 'Jl. Air Murni No. 12, Sidoarjo';
+
+  // Bank BCA
+  document.getElementById('settings-bank-name').value = CONFIG.BANK_NAME || 'BCA';
+  document.getElementById('settings-bank-account').value = CONFIG.BANK_ACCOUNT_NUMBER || '8290-128-449';
+  document.getElementById('settings-bank-holder').value = CONFIG.BANK_ACCOUNT_HOLDER || 'Depot Zam Water Indonesia';
+
+  // QRIS
+  document.getElementById('settings-qris-nmid').value = CONFIG.QRIS_NMID || 'ID102008892110';
+  tempQrisImageBase64 = CONFIG.QRIS_IMAGE_URL || '';
+
+  const qrisPreview = document.getElementById('settings-qris-preview');
+  if (qrisPreview) {
+    if (tempQrisImageBase64) {
+      qrisPreview.src = tempQrisImageBase64;
+      qrisPreview.classList.remove('hidden');
+    } else {
+      qrisPreview.classList.add('hidden');
+    }
+  }
+
+  switchSettingsTab('payment');
+
   const modal = document.getElementById('settings-modal');
-  setupSettingsModal();
   modal?.classList.remove('opacity-0', 'pointer-events-none');
 }
 
 function closeSettingsModal() {
   const modal = document.getElementById('settings-modal');
   modal?.classList.add('opacity-0', 'pointer-events-none');
+}
+
+function switchSettingsTab(tabKey) {
+  document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+    btn.classList.remove('bg-primary', 'text-on-primary');
+    btn.classList.add('bg-surface-container', 'text-on-surface');
+  });
+
+  const activeBtn = document.getElementById(`tab-btn-${tabKey}`);
+  if (activeBtn) {
+    activeBtn.classList.remove('bg-surface-container', 'text-on-surface');
+    activeBtn.classList.add('bg-primary', 'text-on-primary');
+  }
+
+  ['payment', 'profile', 'api'].forEach(pane => {
+    const el = document.getElementById(`settings-pane-${pane}`);
+    if (el) {
+      if (pane === tabKey) {
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    }
+  });
+}
+
+function handleQrisImageUpload(input) {
+  if (input.files && input.files[0]) {
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      tempQrisImageBase64 = e.target.result;
+      const preview = document.getElementById('settings-qris-preview');
+      if (preview) {
+        preview.src = tempQrisImageBase64;
+        preview.classList.remove('hidden');
+      }
+      showToast('Gambar Barcode QRIS dipilih!', 'qr_code_2');
+    };
+    reader.readAsDataURL(file);
+  }
 }
 
 async function testGasConnection() {
@@ -1149,31 +1501,64 @@ async function testGasConnection() {
   }
 }
 
-async function saveSettings() {
-  const inputUrl = document.getElementById('settings-gas-url')?.value.trim();
-  const inputPhone = document.getElementById('settings-admin-phone')?.value.trim();
+async function saveAllSettings() {
+  // Simpan data admin & profil
+  const adminName = document.getElementById('settings-admin-name')?.value.trim() || 'H. Zamroni';
+  const adminPhone = document.getElementById('settings-admin-phone')?.value.trim() || '6281234567890';
+  const depotName = document.getElementById('settings-depot-name')?.value.trim() || 'Depot Zam Water';
+  const depotAddress = document.getElementById('settings-depot-address')?.value.trim() || 'Jl. Air Murni No. 12, Sidoarjo';
 
-  if (inputUrl !== undefined) {
-    CONFIG.GOOGLE_SCRIPT_URL = inputUrl;
-    localStorage.setItem('zam_gas_url', inputUrl);
-  }
-  if (inputPhone) {
-    CONFIG.ADMIN_WA_NUMBER = inputPhone.replace(/[^0-9]/g, '');
-    localStorage.setItem('zam_admin_phone', CONFIG.ADMIN_WA_NUMBER);
-  }
+  // Simpan data rekening BCA & QRIS
+  const bankName = document.getElementById('settings-bank-name')?.value.trim() || 'BCA';
+  const bankAccount = document.getElementById('settings-bank-account')?.value.trim() || '8290-128-449';
+  const bankHolder = document.getElementById('settings-bank-holder')?.value.trim() || 'Depot Zam Water Indonesia';
+  const qrisNmid = document.getElementById('settings-qris-nmid')?.value.trim() || 'ID102008892110';
+
+  // Simpan URL Google Sheets
+  const gasUrl = document.getElementById('settings-gas-url')?.value.trim() || '';
+
+  // Update ke CONFIG
+  CONFIG.ADMIN_NAME = adminName;
+  CONFIG.ADMIN_WA_NUMBER = adminPhone.replace(/[^0-9]/g, '');
+  CONFIG.DEPOT_NAME = depotName;
+  CONFIG.DEPOT_ADDRESS = depotAddress;
+  CONFIG.BANK_NAME = bankName;
+  CONFIG.BANK_ACCOUNT_NUMBER = bankAccount;
+  CONFIG.BANK_ACCOUNT_HOLDER = bankHolder;
+  CONFIG.QRIS_NMID = qrisNmid;
+  CONFIG.QRIS_IMAGE_URL = tempQrisImageBase64;
+  CONFIG.GOOGLE_SCRIPT_URL = gasUrl;
+
+  // Persist ke localStorage
+  localStorage.setItem('zam_admin_name', adminName);
+  localStorage.setItem('zam_admin_phone', CONFIG.ADMIN_WA_NUMBER);
+  localStorage.setItem('zam_depot_name', depotName);
+  localStorage.setItem('zam_depot_address', depotAddress);
+  localStorage.setItem('zam_bank_name', bankName);
+  localStorage.setItem('zam_bank_account', bankAccount);
+  localStorage.setItem('zam_bank_holder', bankHolder);
+  localStorage.setItem('zam_qris_nmid', qrisNmid);
+  localStorage.setItem('zam_qris_image', tempQrisImageBase64);
+  localStorage.setItem('zam_gas_url', gasUrl);
 
   closeSettingsModal();
-  showToast('Pengaturan berhasil disimpan!', 'check_circle');
-  await loadInitialData();
-  renderPOSProducts();
-  renderStockView();
-  renderCustomerList();
-  renderPayrollView();
+  updatePaymentDisplay();
+  updateDriverCalculations();
+  updateSyncIndicator();
+
+  showToast('Pengaturan Bank BCA, QRIS & Admin berhasil disimpan!', 'check_circle');
+
+  // Muat ulang data jika URL sheets berubah
+  if (gasUrl) {
+    await loadInitialData();
+    renderPOSProducts();
+    renderStockView();
+  }
 }
 
 /**
  * -------------------------------------------------------------
- * 8. Toast Helper
+ * 10. Global Toast Helper
  * -------------------------------------------------------------
  */
 function showToast(message, icon = 'check_circle') {
