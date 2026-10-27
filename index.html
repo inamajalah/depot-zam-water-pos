@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+  <meta name="description" content="Aplikasi Operasional & Kasir POS Depot Zam Water terintegrasi Google Sheets"/>
+  <meta name="theme-color" content="#00685f"/>
+  <title>Depot Zam Water - Operasional & POS</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#00685f",
+            "on-primary": "#ffffff",
+            "primary-container": "#008378",
+            "on-primary-container": "#f4fffc",
+            "primary-fixed": "#89f5e7",
+            "primary-fixed-dim": "#6bd8cb",
+            "secondary": "#006b5f",
+            "on-secondary": "#ffffff",
+            "secondary-container": "#6df5e1",
+            "on-secondary-container": "#006f64",
+            "secondary-fixed": "#71f8e4",
+            "on-secondary-fixed": "#00201c",
+            "tertiary": "#17684e",
+            "on-tertiary": "#ffffff",
+            "tertiary-container": "#378166",
+            "on-tertiary-container": "#f5fff8",
+            "tertiary-fixed": "#a6f2d1",
+            "on-tertiary-fixed": "#002116",
+            "background": "#f8f9ff",
+            "surface": "#f8f9ff",
+            "on-surface": "#0b1c30",
+            "on-surface-variant": "#3d4947",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-low": "#eff4ff",
+            "surface-container": "#e5eeff",
+            "surface-container-high": "#dce9ff",
+            "surface-container-highest": "#d3e4fe",
+            "outline": "#6d7a77",
+            "outline-variant": "#bcc9c6",
+            "error": "#ba1a1a",
+            "on-error": "#ffffff",
+            "error-container": "#ffdad6",
+            "on-error-container": "#93000a",
+            "inverse-surface": "#213145",
+            "inverse-on-surface": "#eaf1ff"
+          },
+          fontFamily: {
+            "headline-xl": ["Space Grotesk", "sans-serif"],
+            "headline-lg": ["Space Grotesk", "sans-serif"],
+            "headline-md": ["Space Grotesk", "sans-serif"],
+            "headline-sm": ["Space Grotesk", "sans-serif"],
+            "pos-numeral-lg": ["Space Grotesk", "monospace"],
+            "pos-numeral-md": ["Space Grotesk", "monospace"],
+            "body-lg": ["Hanken Grotesk", "sans-serif"],
+            "body-md": ["Hanken Grotesk", "sans-serif"],
+            "body-sm": ["Hanken Grotesk", "sans-serif"],
+            "label-lg": ["Hanken Grotesk", "sans-serif"],
+            "label-md": ["Hanken Grotesk", "sans-serif"],
+            "label-sm": ["Hanken Grotesk", "sans-serif"]
+          },
+          spacing: {
+            "margin": "1rem",
+            "space-xs": "0.25rem",
+            "space-sm": "0.5rem",
+            "space-md": "0.875rem",
+            "space-lg": "1.25rem",
+            "space-xl": "2rem"
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    @layer base {
+      html, body {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        overscroll-behavior: none;
+      }
+      .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+      .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+    }
+    ::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Print styles untuk Struk & Slip Gaji */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #receipt-modal, #receipt-modal * {
+        visibility: visible;
+      }
+      #receipt-card {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        max-width: 80mm;
+        box-shadow: none;
+        border: none;
+      }
+      #slip-modal, #slip-modal * {
+        visibility: visible;
+      }
+      #slip-card-content {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        box-shadow: none;
+      }
+      header, nav, #global-toast, .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-surface font-body-md text-body-md text-on-surface antialiased flex flex-col min-h-screen selection:bg-secondary-fixed selection:text-on-secondary-fixed">
+
+  <!-- =========================================================================
+       TOP HEADER (Sticky & Glassmorphism)
+       ========================================================================= -->
+  <header class="fixed top-0 w-full z-40 pt-safe bg-surface-container-lowest/90 backdrop-blur-xl border-b border-surface-container-high/60 shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+    <div class="h-16 px-margin max-w-7xl mx-auto flex items-center justify-between gap-space-sm">
+      
+      <!-- Brand Logo & Live Status -->
+      <div class="flex items-center gap-space-sm min-w-0">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-primary-container flex items-center justify-center text-on-primary shadow-sm shrink-0">
+          <span class="material-symbols-outlined text-[24px]">water_drop</span>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-bold">Zam Water</span>
+            <!-- Live Indicator Badge -->
+            <button id="sync-indicator" onclick="openSettingsModal()" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-tertiary-fixed/40 text-on-tertiary-fixed text-label-sm font-label-sm shrink-0 hover:opacity-80 transition-opacity" title="Klik untuk Pengaturan Google Sheets">
+              <span id="sync-indicator-dot" class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>
+              <span id="sync-indicator-text">Online</span>
+            </button>
+          </div>
+          <span id="header-subtitle" class="font-label-sm text-label-sm text-on-surface-variant truncate">Kasir POS</span>
+        </div>
+      </div>
+
+      <!-- Right Header Actions: Water Tank Telemetry & Settings -->
+      <div class="flex items-center gap-2 sm:gap-space-sm shrink-0">
+        <div class="hidden sm:flex flex-col items-end">
+          <span class="font-label-sm text-[11px] text-outline uppercase tracking-wider">Sisa Tangki Utama</span>
+          <span class="font-pos-numeral-md text-label-md text-primary font-bold">3.850 L</span>
+        </div>
+
+        <!-- Tombol Setting API Google Sheets -->
+        <button onclick="openSettingsModal()" class="w-9 h-9 rounded-full bg-surface-container-low text-on-surface-variant flex items-center justify-center hover:bg-surface-container hover:text-primary transition-colors" title="Pengaturan Google Sheets API">
+          <span class="material-symbols-outlined text-[20px]">settings</span>
+        </button>
+
+        <!-- Profile Avatar -->
+        <div class="w-9 h-9 p-0.5 rounded-full bg-surface-container-low flex items-center justify-center border border-primary/20">
+          <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary font-bold text-xs">
+            BS
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       MAIN CONTENT CONTAINER (SPA Views)
+       ========================================================================= -->
+  <main class="flex-1 flex flex-col relative w-full pt-16 pb-24 bg-surface max-w-7xl mx-auto">
+
+    <!-- =======================================================================
+         VIEW 1: KASIR POINT OF SALE (POS)
+         ======================================================================= -->
+    <div id="view-pos" class="app-view flex flex-col w-full">
+      <!-- Operational Sub-bar: Shift Telemetry -->
+      <div class="px-margin pt-space-sm pb-space-xs flex items-center justify-between gap-space-sm">
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-secondary-fixed text-on-secondary-fixed shadow-sm">
+            <span class="material-symbols-outlined text-[18px]">water_drop</span>
+          </span>
+          <div>
+            <p class="font-label-sm text-[11px] text-outline uppercase tracking-wider font-semibold">Shift Kasir #01</p>
+            <p class="font-headline-sm text-label-lg text-on-surface font-semibold">Budi Santoso</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 bg-surface-container-low px-3 py-1.5 rounded-full shadow-sm border border-surface-container/60">
+          <span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+          <span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Kran #1 & #2 Ready</span>
+        </div>
+      </div>
+
+      <!-- Category Filter Pills Bar -->
+      <div class="px-margin py-space-sm">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+          <button class="cat-pill px-4 py-2 rounded-full bg-primary text-on-primary font-label-md text-label-md shrink-0 transition-all shadow-sm active:scale-95" onclick="setPOSCategory('all', this)">
+            Semua
+          </button>
+          <button class="cat-pill px-4 py-2 rounded-full bg-surface-container-lowest text-on-surface font-label-md text-label-md shrink-0 shadow-sm border border-surface-container-high/60 active:scale-95" onclick="setPOSCategory('refill', this)">
+            Isi Ulang Galon
+          </button>
+          <button class="cat-pill px-4 py-2 rounded-full bg-surface-container-lowest text-on-surface font-label-md text-label-md shrink-0 shadow-sm border border-surface-container-high/60 active:scale-95" onclick="setPOSCategory('new-gallon', this)">
+            Galon Baru
+          </button>
+          <button class="cat-pill px-4 py-2 rounded-full bg-surface-container-lowest text-on-surface font-label-md text-label-md shrink-0 shadow-sm border border-surface-container-high/60 active:scale-95" onclick="setPOSCategory('bottles', this)">
+            Botol &amp; Dus
+          </button>
+          <button class="cat-pill px-4 py-2 rounded-full bg-surface-container-lowest text-on-surface font-label-md text-label-md shrink-0 shadow-sm border border-surface-container-high/60 active:scale-95" onclick="setPOSCategory('accessories', this)">
+            Aksesoris
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-space-md px-margin">
+        <!-- Kolom Kiri: Grid Produk POS (lg: 7 cols) -->
+        <div class="lg:col-span-7 pb-space-md">
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-space-sm" id="pos-product-grid">
+            <!-- Dynamic product cards populated by app.js -->
+          </div>
+        </div>
+
+        <!-- Kolom Kanan: Keranjang Belanja & Pembayaran POS (lg: 5 cols) -->
+        <div class="lg:col-span-5 pb-space-lg">
+          <div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-md border border-surface-container-high/60 sticky top-20">
+            
+            <!-- Cart Header -->
+            <div class="flex items-center justify-between pb-space-xs mb-space-sm border-b border-surface-container/60">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-[22px]">shopping_bag</span>
+                <h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Keranjang POS</h2>
+              </div>
+              <span class="px-2.5 py-0.5 rounded-full bg-secondary-fixed/50 text-on-secondary-fixed font-label-sm text-label-sm font-semibold" id="cart-item-count">
+                0 Item
+              </span>
+            </div>
+
+            <!-- Customer Picker -->
+            <div class="mb-space-sm">
+              <label class="font-label-sm text-outline uppercase tracking-wider block mb-1">Pelanggan</label>
+              <div class="relative">
+                <select id="pos-customer-select" class="w-full py-2.5 pl-3 pr-8 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm border border-surface-container-high/80 focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none">
+                  <option value="Pelanggan Walk-in">Pelanggan Umum (Walk-in / Bawa Sendiri)</option>
+                </select>
+                <span class="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-outline text-[18px]">expand_more</span>
+              </div>
+            </div>
+
+            <!-- Cart Items List Container -->
+            <div class="flex flex-col gap-2 max-h-60 overflow-y-auto no-scrollbar mb-space-md" id="cart-items-container">
+              <!-- Cart rows populated dynamically -->
+            </div>
+
+            <!-- Financial Calculation Matrix -->
+            <div class="bg-surface-container-low p-space-sm rounded-xl mb-space-md flex flex-col gap-1.5 border border-surface-container/60">
+              <div class="flex justify-between items-center text-body-sm text-on-surface-variant font-body-sm">
+                <span>Subtotal Item</span>
+                <span class="font-pos-numeral-md font-semibold" id="label-subtotal">Rp 0</span>
+              </div>
+              <div class="flex justify-between items-center text-body-sm text-on-surface-variant font-body-sm">
+                <span>Diskon Pelanggan / Voucher</span>
+                <span class="font-pos-numeral-md text-primary font-medium">Rp 0</span>
+              </div>
+              <div class="flex justify-between items-center pt-2 mt-1 border-t border-surface-container-high/80">
+                <span class="font-label-lg text-label-lg font-bold text-on-surface">Total Tagihan</span>
+                <span class="font-pos-numeral-lg text-pos-numeral-lg text-primary font-bold tracking-tight" id="label-total">Rp 0</span>
+              </div>
+            </div>
+
+            <!-- Payment Method Selection -->
+            <div class="mb-space-md">
+              <p class="font-label-sm text-outline uppercase tracking-wider mb-2 font-semibold">Metode Pembayaran</p>
+              <div class="grid grid-cols-3 gap-2">
+                <button class="pay-tab py-2.5 px-2 rounded-xl bg-primary text-on-primary font-label-md text-label-md flex flex-col items-center justify-center gap-1 shadow-sm active:scale-95 transition-all" id="tab-cash" onclick="switchPayTab('cash')">
+                  <span class="material-symbols-outlined text-[20px]">payments</span>
+                  <span>Tunai</span>
+                </button>
+                <button class="pay-tab py-2.5 px-2 rounded-xl bg-surface-container-low text-on-surface font-label-md text-label-md flex flex-col items-center justify-center gap-1 shadow-sm active:scale-95 transition-all" id="tab-qris" onclick="switchPayTab('qris')">
+                  <span class="material-symbols-outlined text-[20px]">qr_code_scanner</span>
+                  <span>QRIS</span>
+                </button>
+                <button class="pay-tab py-2.5 px-2 rounded-xl bg-surface-container-low text-on-surface font-label-md text-label-md flex flex-col items-center justify-center gap-1 shadow-sm active:scale-95 transition-all" id="tab-transfer" onclick="switchPayTab('transfer')">
+                  <span class="material-symbols-outlined text-[20px]">account_balance</span>
+                  <span>Transfer</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Tab Content: Tunai Fast Denominations -->
+            <div class="pay-pane flex flex-col gap-2 mb-space-md" id="content-cash">
+              <p class="font-label-sm text-on-surface-variant font-medium">Nominal Cepat Diterima:</p>
+              <div class="grid grid-cols-3 gap-2">
+                <button class="denom-btn py-2 px-2 rounded-lg bg-secondary-fixed text-on-secondary-fixed font-pos-numeral-md text-label-md font-bold active:scale-95 border border-secondary-fixed-dim" onclick="selectNominal('pas', this)">
+                  Uang Pas
+                </button>
+                <button class="denom-btn py-2 px-2 rounded-lg bg-surface-container-high text-on-surface font-pos-numeral-md text-label-md font-semibold active:scale-95" onclick="selectNominal(50000, this)">
+                  50.000
+                </button>
+                <button class="denom-btn py-2 px-2 rounded-lg bg-surface-container-high text-on-surface font-pos-numeral-md text-label-md font-semibold active:scale-95" onclick="selectNominal(100000, this)">
+                  100.000
+                </button>
+              </div>
+              <div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-high mt-1">
+                <span class="font-label-md text-label-md text-outline">Kembalian:</span>
+                <span class="font-pos-numeral-md text-headline-sm text-primary font-bold" id="cash-kembalian">Rp 0</span>
+              </div>
+            </div>
+
+            <!-- Tab Content: QRIS Simulation -->
+            <div class="pay-pane hidden flex-col items-center p-3 rounded-xl bg-surface-container-low mb-space-md text-center border border-surface-container-high/60" id="content-qris">
+              <div class="flex items-center gap-1.5 mb-2">
+                <span class="px-2 py-0.5 rounded bg-on-error text-error font-pos-numeral-md text-label-sm font-bold">QRIS</span>
+                <span class="font-label-sm text-label-sm text-on-surface-variant">NMID: ID102008892110</span>
+              </div>
+              <!-- QR Graphic -->
+              <div class="p-3 bg-surface-container-lowest rounded-xl shadow-inner mb-2 border border-surface-container/60">
+                <svg class="w-36 h-36" fill="currentColor" viewBox="0 0 100 100">
+                  <path d="M10 10h24v24H10zM14 14v16h16V14zm4 4h8v8h-8zM66 10h24v24H66zM70 14v16h16V14zm4 4h8v8h-8zM10 66h24v24H10zM14 70v16h16V70zm4 4h8v8h-8zM42 12h6v6h-6zm10 0h6v6h-6zm-10 10h6v6h-6zm10 0h6v6h-6zm-10 10h6v6h-6zm10 10h6v6h-6zm10-10h6v6h-6zm10 10h6v6h-6zm-10 10h6v6h-6zm10 10h6v6h-6zm-20 0h6v6h-6zm-10 0h6v6h-6zm-10 10h6v6h-6zm20 10h6v6h-6zm10 10h6v6h-6zm10 0h6v6h-6zm10-10h6v6h-6zm0 10h6v6h-6z" fill="#00685f"></path>
+                </svg>
+              </div>
+              <p class="font-label-sm text-label-sm text-on-surface font-semibold">Scan QR untuk verifikasi instan</p>
+              <p class="font-body-sm text-label-sm text-outline">Batas waktu bayar: <span class="text-error font-semibold" id="qris-timer">04:58</span></p>
+            </div>
+
+            <!-- Tab Content: Transfer Bank -->
+            <div class="pay-pane hidden flex-col gap-2 p-3 rounded-xl bg-surface-container-low mb-space-md border border-surface-container-high/60" id="content-transfer">
+              <div class="flex items-center justify-between">
+                <span class="px-2.5 py-1 rounded-md bg-surface-container-lowest text-primary font-headline-sm text-label-md font-bold shadow-xs">BCA</span>
+                <span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Otomatis Terverifikasi</span>
+              </div>
+              <div>
+                <p class="font-body-sm text-body-sm text-outline">Nomor Rekening:</p>
+                <div class="flex items-center justify-between mt-0.5">
+                  <span class="font-pos-numeral-md text-headline-sm font-bold text-on-surface tracking-wider">8290-128-449</span>
+                  <button class="px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold active:scale-95 flex items-center gap-1 shadow-sm" onclick="copyRekening(this)">
+                    <span class="material-symbols-outlined text-[14px]">content_copy</span>
+                    <span>Salin</span>
+                  </button>
+                </div>
+                <p class="font-body-sm text-body-sm text-on-surface font-medium mt-1">a.n Depot Zam Water Indonesia</p>
+              </div>
+            </div>
+
+            <!-- Main Trigger Buttons -->
+            <div class="flex flex-col gap-2">
+              <button class="w-full py-3.5 px-4 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-md active:translate-y-0.5 hover:bg-primary-container transition-all" onclick="processPaymentAndOpenReceipt()">
+                <span class="material-symbols-outlined text-[20px]">print</span>
+                <span>Bayar &amp; Cetak Struk</span>
+              </button>
+              <button class="w-full py-3 px-4 rounded-xl bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center justify-center gap-2 active:scale-[0.99] hover:bg-surface-container transition-colors" onclick="showToast('Pesanan disimpan ke Antrean Pengantaran!', 'local_shipping')">
+                <span class="material-symbols-outlined text-[18px]">local_shipping</span>
+                <span>Simpan Pesanan / Jadwalkan Antar</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- =======================================================================
+         VIEW 2: STOK & PELANGGAN
+         ======================================================================= -->
+    <div id="view-stok" class="app-view hidden flex flex-col w-full pb-8">
+      
+      <!-- Sticky Tab Switcher -->
+      <div class="px-margin pt-space-sm pb-space-xs sticky top-16 z-30 bg-surface/95 backdrop-blur-md">
+        <div class="flex p-1 bg-surface-container rounded-xl gap-1 shadow-sm max-w-md mx-auto">
+          <button class="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-surface-container-lowest text-primary font-label-md text-label-md shadow-sm transition-all duration-200" id="btn-tab-stok" onclick="switchStockTab('stok')">
+            <span class="material-symbols-outlined text-[18px]">inventory_2</span>
+            <span>Stok Galon</span>
+          </button>
+          <button class="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-on-surface-variant font-label-md text-label-md transition-all duration-200 hover:text-on-surface" id="btn-tab-cust" onclick="switchStockTab('cust')">
+            <span class="material-symbols-outlined text-[18px]">group</span>
+            <span>Pelanggan Tetap</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB 1: MANAJEMEN STOK -->
+      <div class="flex flex-col w-full px-margin space-y-4 pt-2" id="section-stok">
+        
+        <!-- Capacity Banner -->
+        <div class="relative overflow-hidden rounded-xl bg-gradient-to-r from-primary to-primary-container p-4 text-on-primary shadow-md">
+          <div class="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-secondary-fixed/20 blur-xl pointer-events-none"></div>
+          <div class="flex items-center justify-between relative z-10">
+            <div>
+              <span class="text-label-sm font-label-sm uppercase tracking-wider text-primary-fixed font-semibold">Kapasitas Depo Zam</span>
+              <div class="flex items-baseline gap-2 mt-0.5">
+                <span class="font-pos-numeral-lg text-pos-numeral-lg tracking-tight font-bold">242</span>
+                <span class="text-label-md font-label-md text-on-primary/80">Total Galon Aktif</span>
+              </div>
+              <p class="text-body-sm font-body-sm text-on-primary/90 mt-1">Sirkulasi lancar: 62 galon sedang berputar di pelanggan</p>
+            </div>
+            <div class="w-14 h-14 rounded-full bg-surface-container-lowest/15 backdrop-blur-md flex items-center justify-center shadow-inner">
+              <span class="material-symbols-outlined text-[32px] text-secondary-fixed">water_drop</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Warning Alert Banner -->
+        <div class="relative overflow-hidden rounded-xl bg-error-container p-3.5 text-on-error-container shadow-sm flex items-start gap-3 border border-error/20">
+          <div class="w-8 h-8 rounded-full bg-error/20 flex items-center justify-center shrink-0 mt-0.5">
+            <span class="material-symbols-outlined text-[20px] text-error" style="font-variation-settings: 'FILL' 1;">warning</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="font-label-md text-label-md font-bold text-on-error-container">Peringatan Stok Menipis!</span>
+              <span class="inline-flex px-1.5 py-0.2 rounded-full bg-error text-on-error text-[10px] font-bold">Kritis</span>
+            </div>
+            <p class="font-body-sm text-body-sm text-on-error-container mt-0.5 leading-snug">
+              Tutup Segel Biru tersisa <span class="font-bold underline" id="stock-tutup-val">12</span> pack (di bawah ambang batas 25 pack). Segera order ke distributor.
+            </p>
+            <div class="mt-2.5 flex items-center gap-2">
+              <a href="https://wa.me/6281234567890?text=Halo%20Distributor,%20kami%20ingin%20pesan%20tambahan%20Tutup%20Segel%20Biru%20Depot%20Zam%20Water" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-error text-on-error font-label-sm text-label-sm shadow-sm active:translate-y-0.5 transition-transform">
+                <span class="material-symbols-outlined text-[16px]">local_shipping</span>
+                <span>Order Stok Distributor</span>
+              </a>
+              <button class="px-2.5 py-1.5 rounded-lg text-on-error-container font-label-sm text-label-sm hover:bg-on-error-container/10" onclick="this.closest('.relative').remove()">
+                Abaikan
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3 Bento Metric Cards -->
+        <div class="grid grid-cols-3 gap-2">
+          <div class="flex flex-col justify-between p-3 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container-high/60">
+            <div class="flex items-center justify-between">
+              <span class="material-symbols-outlined text-primary text-[20px]">water_full</span>
+              <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+            </div>
+            <div class="mt-2">
+              <span class="font-pos-numeral-md text-pos-numeral-md text-on-surface block leading-tight font-bold" id="metric-galon-terisi">142</span>
+              <span class="font-label-sm text-label-sm text-on-surface-variant truncate">Galon Terisi</span>
+              <span class="inline-block mt-1 px-1.5 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold">Aman</span>
+            </div>
+          </div>
+
+          <div class="flex flex-col justify-between p-3 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container-high/60">
+            <div class="flex items-center justify-between">
+              <span class="material-symbols-outlined text-secondary text-[20px]">water_bottle</span>
+              <span class="w-2 h-2 rounded-full bg-secondary"></span>
+            </div>
+            <div class="mt-2">
+              <span class="font-pos-numeral-md text-pos-numeral-md text-on-surface block leading-tight font-bold">38</span>
+              <span class="font-label-sm text-label-sm text-on-surface-variant truncate">Siap Isi</span>
+              <span class="inline-block mt-1 px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant text-[10px] font-bold">Normal</span>
+            </div>
+          </div>
+
+          <div class="flex flex-col justify-between p-3 rounded-xl bg-error-container/60 shadow-sm border border-error/20">
+            <div class="flex items-center justify-between">
+              <span class="material-symbols-outlined text-error text-[20px]">verified</span>
+              <span class="w-2 h-2 rounded-full bg-error animate-ping"></span>
+            </div>
+            <div class="mt-2">
+              <span class="font-pos-numeral-md text-pos-numeral-md text-on-error-container block leading-tight font-bold">12</span>
+              <span class="font-label-sm text-label-sm text-on-error-container truncate">Tutup &amp; Segel</span>
+              <span class="inline-block mt-1 px-1.5 py-0.5 rounded bg-error text-on-error text-[10px] font-bold">Menipis</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Stock Adjuster: Selesai Cuci -->
+        <div class="rounded-xl bg-surface-container-low p-3.5 shadow-sm border border-surface-container/60">
+          <div class="flex items-center justify-between mb-2.5">
+            <div class="flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-primary text-[20px]">bolt</span>
+              <span class="font-label-md text-label-md text-on-surface font-bold">Update Cepat Selesai Cuci</span>
+            </div>
+            <span class="text-label-sm font-label-sm text-primary font-medium">Bilik 1 &amp; 2 Aktif</span>
+          </div>
+          <div class="flex items-center justify-between bg-surface-container-lowest p-2 rounded-lg shadow-inner border border-surface-container-high/60">
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+                <span class="material-symbols-outlined text-[18px]">sanitizer</span>
+              </div>
+              <div>
+                <p class="font-label-md text-label-md text-on-surface font-semibold">Galon Kosong → Siap Isi</p>
+                <p class="font-body-sm text-[11px] text-outline">Tambahkan ke rak siap isi</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface active:scale-95 transition-transform font-bold" onclick="adjustQuickWash(-1)">
+                <span class="material-symbols-outlined text-[18px]">remove</span>
+              </button>
+              <span class="font-pos-numeral-md text-pos-numeral-md text-primary w-7 text-center font-bold" id="quick-wash-val">5</span>
+              <button class="w-8 h-8 rounded-lg bg-primary text-on-primary flex items-center justify-center active:scale-95 transition-transform shadow-sm" onclick="adjustQuickWash(1)">
+                <span class="material-symbols-outlined text-[18px]">add</span>
+              </button>
+              <button class="ml-2 px-3 py-1.5 rounded-lg bg-tertiary text-on-tertiary font-label-sm text-label-sm font-semibold active:scale-95 shadow-sm" onclick="applyQuickWash()">
+                Simpan
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-Time Inventory List -->
+        <div class="flex flex-col space-y-2">
+          <div class="flex items-center justify-between px-0.5">
+            <h3 class="font-label-lg text-label-lg text-on-surface font-bold">Rincian Inventaris Real-Time</h3>
+            <span class="font-label-sm text-label-sm text-outline">Sinkron live</span>
+          </div>
+
+          <!-- Item 1: Galon Air RO -->
+          <div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container-high/60">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                <span class="material-symbols-outlined text-[24px]">water</span>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <h4 class="font-label-md text-label-md text-on-surface font-semibold truncate">Galon Air RO Terisi</h4>
+                  <span class="inline-flex items-center px-1.5 py-0.2 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold">Aman</span>
+                </div>
+                <p class="font-body-sm text-body-sm text-outline truncate">Rak Depan Utama • TDS &lt; 10 ppm</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <div class="text-right">
+                <span class="font-pos-numeral-md text-pos-numeral-md text-primary block leading-tight font-bold" id="stock-ro-val">85</span>
+                <span class="font-label-sm text-[11px] text-outline">Galon</span>
+              </div>
+              <button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-primary hover:bg-primary hover:text-on-primary transition-colors" onclick="openEditStockModal('PROD-02')">
+                <span class="material-symbols-outlined text-[18px]">edit</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Item 2: Galon Mineral -->
+          <div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container-high/60">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-xl bg-secondary-fixed/40 flex items-center justify-center text-on-secondary-fixed shrink-0">
+                <span class="material-symbols-outlined text-[24px]">humidity_mid</span>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <h4 class="font-label-md text-label-md text-on-surface font-semibold truncate">Galon Mineral Terisi</h4>
+                  <span class="inline-flex items-center px-1.5 py-0.2 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold">Aman</span>
+                </div>
+                <p class="font-body-sm text-body-sm text-outline truncate">Rak Samping • pH 7.6 Alami</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <div class="text-right">
+                <span class="font-pos-numeral-md text-pos-numeral-md text-secondary block leading-tight font-bold" id="stock-min-val">57</span>
+                <span class="font-label-sm text-[11px] text-outline">Galon</span>
+              </div>
+              <button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-primary hover:bg-primary hover:text-on-primary transition-colors" onclick="openEditStockModal('PROD-01')">
+                <span class="material-symbols-outlined text-[18px]">edit</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Item 3: Galon Baru -->
+          <div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container-high/60">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-on-surface-variant shrink-0">
+                <span class="material-symbols-outlined text-[24px]">shopping_bag</span>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <h4 class="font-label-md text-label-md text-on-surface font-semibold truncate">Galon Baru + Air</h4>
+                  <span class="inline-flex items-center px-1.5 py-0.2 rounded-full bg-surface-container-high text-on-surface-variant text-[10px] font-bold">Stok Toko</span>
+                </div>
+                <p class="font-body-sm text-body-sm text-outline truncate">Polycarbonate Tebal 19L</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <div class="text-right">
+                <span class="font-pos-numeral-md text-pos-numeral-md text-on-surface block leading-tight font-bold">18</span>
+                <span class="font-label-sm text-[11px] text-outline">Unit</span>
+              </div>
+              <button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-primary hover:bg-primary hover:text-on-primary transition-colors" onclick="openEditStockModal('PROD-04')">
+                <span class="material-symbols-outlined text-[18px]">edit</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- TAB 2: DATA PELANGGAN TETAP -->
+      <div class="hidden flex flex-col w-full px-margin space-y-4 pt-2" id="section-cust">
+        
+        <!-- Search and Action Bar -->
+        <div class="flex flex-col space-y-2">
+          <div class="flex items-center gap-2">
+            <div class="relative flex-1">
+              <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline text-[20px]">search</span>
+              <input class="w-full pl-11 pr-10 py-3 rounded-xl bg-surface-container-lowest text-on-surface font-body-md text-body-md shadow-sm border border-surface-container-high/60 focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-outline" 
+                     id="input-search-cust" 
+                     oninput="filterCustomers()" 
+                     placeholder="Cari nama, nomor HP, atau alamat..." 
+                     type="text"/>
+              <button class="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface" onclick="clearCustSearch()">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+            <button onclick="openAddCustomerModal()" class="py-3 px-3.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md flex items-center gap-1.5 shadow-sm active:scale-95 shrink-0 hover:bg-primary-container">
+              <span class="material-symbols-outlined text-[18px]">person_add</span>
+              <span class="hidden sm:inline">Tambah</span>
+            </button>
+          </div>
+
+          <!-- Quick Category Chips -->
+          <div class="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            <button class="cust-cat-chip px-3 py-1 rounded-full bg-primary text-on-primary font-label-sm text-label-sm whitespace-nowrap shadow-sm" onclick="filterCustCat('all', this)">Semua Pelanggan</button>
+            <button class="cust-cat-chip px-3 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm whitespace-nowrap hover:bg-surface-container-high" onclick="filterCustCat('Warung', this)">Warung &amp; Toko</button>
+            <button class="cust-cat-chip px-3 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm whitespace-nowrap hover:bg-surface-container-high" onclick="filterCustCat('Perumahan', this)">Perumahan</button>
+            <button class="cust-cat-chip px-3 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm whitespace-nowrap hover:bg-surface-container-high" onclick="filterCustCat('Kantor', this)">Kantor &amp; Usaha</button>
+          </div>
+        </div>
+
+        <!-- Customer Card List Container -->
+        <div class="flex flex-col space-y-3" id="customer-list-container">
+          <!-- Populated by app.js -->
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- =======================================================================
+         VIEW 3: PORTAL LAPORAN SUPIR (DRIVER PORTAL)
+         ======================================================================= -->
+    <div id="view-driver" class="app-view hidden flex flex-col w-full pb-8">
+      
+      <!-- Driver Greeting & Profile Card -->
+      <div class="px-margin pt-space-sm">
+        <div class="relative overflow-hidden rounded-xl bg-surface-container-lowest shadow-sm p-space-md border border-surface-container-high/60">
+          <div class="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-primary-fixed/20 blur-2xl pointer-events-none"></div>
+          <div class="flex items-start justify-between gap-space-sm relative z-10">
+            <div class="flex items-center gap-space-md min-w-0">
+              <div class="relative shrink-0">
+                <div class="w-13 h-13 rounded-xl bg-gradient-to-tr from-primary to-primary-container text-on-primary flex items-center justify-center font-bold text-lg shadow-sm">
+                  BS
+                </div>
+                <span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-surface-container-lowest flex items-center justify-center">
+                  <span class="w-2.5 h-2.5 rounded-full bg-tertiary animate-ping"></span>
+                </span>
+              </div>
+              <div class="min-w-0 flex flex-col">
+                <h2 class="font-headline-sm text-headline-sm text-on-surface truncate font-bold">Halo, Budi Santoso</h2>
+                <p class="font-body-sm text-body-sm text-on-surface-variant truncate">Armada Motor Roda 3 Tossa B-4921-ZAM</p>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-semibold">
+                    <span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                    Sedang Bertugas
+                  </span>
+                  <span class="font-label-sm text-label-sm text-outline">Trip #03</span>
+                </div>
+              </div>
+            </div>
+            <a href="https://wa.me/6281234567890" target="_blank" class="shrink-0 p-2 rounded-lg bg-surface-container text-primary hover:bg-surface-container-high transition-colors" title="Hubungi CS Admin">
+              <span class="material-symbols-outlined text-[20px]">support_agent</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Today's Delivery Stat Bento -->
+      <div class="px-margin mt-space-md">
+        <div class="flex items-center justify-between mb-space-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-primary text-[18px]">insights</span>
+            <span class="font-label-md text-label-md text-on-surface font-semibold">Ringkasan Hari Ini</span>
+          </div>
+          <span class="font-label-sm text-label-sm text-outline">Shift Berjalan</span>
+        </div>
+        <div class="grid grid-cols-3 gap-space-xs">
+          <div class="rounded-xl bg-surface-container-lowest p-space-sm shadow-sm flex flex-col justify-between border border-surface-container-high/60">
+            <div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary mb-1">
+              <span class="material-symbols-outlined text-[16px]">local_shipping</span>
+            </div>
+            <div>
+              <span class="font-pos-numeral-md text-pos-numeral-md text-on-surface block leading-tight font-bold">3</span>
+              <span class="font-label-sm text-label-sm text-on-surface-variant leading-none">Trip Selesai</span>
+            </div>
+          </div>
+          <div class="rounded-xl bg-surface-container-lowest p-space-sm shadow-sm flex flex-col justify-between border border-surface-container-high/60">
+            <div class="w-7 h-7 rounded-lg bg-secondary-container/40 flex items-center justify-center text-secondary mb-1">
+              <span class="material-symbols-outlined text-[16px]">water_drop</span>
+            </div>
+            <div>
+              <span class="font-pos-numeral-md text-pos-numeral-md text-secondary block leading-tight font-bold">45</span>
+              <span class="font-label-sm text-label-sm text-on-surface-variant leading-none">Galon Terkirim</span>
+            </div>
+          </div>
+          <div class="rounded-xl bg-surface-container-lowest p-space-sm shadow-sm flex flex-col justify-between border border-surface-container-high/60">
+            <div class="w-7 h-7 rounded-lg bg-tertiary-fixed/40 flex items-center justify-center text-tertiary mb-1">
+              <span class="material-symbols-outlined text-[16px]">payments</span>
+            </div>
+            <div>
+              <span class="font-pos-numeral-md text-label-lg font-bold text-tertiary block leading-tight truncate">270rb</span>
+              <span class="font-label-sm text-label-sm text-on-surface-variant leading-none">Tunai Kasir</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Form Section: Input Setoran & Laporan Harian -->
+      <div class="px-margin mt-space-md">
+        <div class="rounded-xl bg-surface-container-lowest p-space-md shadow-sm border border-surface-container-high/60">
+          <div class="flex items-center justify-between mb-space-md pb-2 border-b border-surface-container-high/60">
+            <div class="flex items-center gap-space-sm">
+              <div class="w-8 h-8 rounded-lg bg-primary-fixed/40 flex items-center justify-center text-primary">
+                <span class="material-symbols-outlined text-[20px]">assignment_add</span>
+              </div>
+              <div>
+                <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Form Setoran &amp; Laporan</h3>
+                <p class="font-body-sm text-body-sm text-on-surface-variant">Update data fisik muatan dan uang setoran</p>
+              </div>
+            </div>
+            <span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-semibold">Shift Siang</span>
+          </div>
+
+          <form class="flex flex-col gap-space-md" id="driverReportForm" onsubmit="event.preventDefault();">
+            
+            <!-- Field 1: Galon Keluar -->
+            <div class="flex flex-col gap-1.5">
+              <label class="font-label-md text-label-md text-on-surface flex items-center justify-between font-semibold" for="galonKeluar">
+                <span class="flex items-center gap-1">
+                  <span class="material-symbols-outlined text-primary text-[18px]">output</span>
+                  1. Jumlah Galon Keluar (Diantar)
+                </span>
+                <span class="font-label-sm text-label-sm text-outline">Target Muatan</span>
+              </label>
+              <div class="relative flex items-center rounded-xl bg-surface-container-low shadow-sm border border-surface-container-high/60">
+                <button class="w-12 h-12 flex items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-transform" onclick="adjustDriverCount('galonKeluar', -1)" type="button">
+                  <span class="material-symbols-outlined">remove</span>
+                </button>
+                <input class="w-full text-center bg-transparent py-2.5 font-pos-numeral-md text-pos-numeral-md text-on-surface outline-none font-bold" id="galonKeluar" min="0" type="number" value="50"/>
+                <button class="w-12 h-12 flex items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-transform" onclick="adjustDriverCount('galonKeluar', 1)" type="button">
+                  <span class="material-symbols-outlined">add</span>
+                </button>
+                <span class="absolute right-3 pointer-events-none font-label-md text-label-md text-outline">Galon</span>
+              </div>
+            </div>
+
+            <!-- Field 2: Galon Kosong Kembali -->
+            <div class="flex flex-col gap-1.5">
+              <label class="font-label-md text-label-md text-on-surface flex items-center justify-between font-semibold" for="galonKembali">
+                <span class="flex items-center gap-1">
+                  <span class="material-symbols-outlined text-tertiary text-[18px]">input</span>
+                  2. Galon Kosong Kembali (Tarik Pelanggan)
+                </span>
+                <span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-semibold" id="selisihBadge">Selisih: 2 Galon</span>
+              </label>
+              <div class="relative flex items-center rounded-xl bg-surface-container-low shadow-sm border border-surface-container-high/60">
+                <button class="w-12 h-12 flex items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-transform" onclick="adjustDriverCount('galonKembali', -1)" type="button">
+                  <span class="material-symbols-outlined">remove</span>
+                </button>
+                <input class="w-full text-center bg-transparent py-2.5 font-pos-numeral-md text-pos-numeral-md text-on-surface outline-none font-bold" id="galonKembali" min="0" type="number" value="48"/>
+                <button class="w-12 h-12 flex items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-transform" onclick="adjustDriverCount('galonKembali', 1)" type="button">
+                  <span class="material-symbols-outlined">add</span>
+                </button>
+                <span class="absolute right-3 pointer-events-none font-label-md text-label-md text-outline">Galon</span>
+              </div>
+              <p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1 px-1" id="selisihInfo">
+                <span class="material-symbols-outlined text-[15px] text-error">info</span>
+                Ada 2 galon kosong tertinggal / belum kembali ke depot.
+              </p>
+            </div>
+
+            <!-- Field 3: Total Uang Setoran -->
+            <div class="flex flex-col gap-1.5">
+              <label class="font-label-md text-label-md text-on-surface flex items-center justify-between font-semibold" for="setoranTunai">
+                <span class="flex items-center gap-1">
+                  <span class="material-symbols-outlined text-primary text-[18px]">payments</span>
+                  3. Total Uang Setoran Tunai Kasir
+                </span>
+                <span class="font-label-sm text-label-sm text-tertiary">Tarif Rp 6.000/gl</span>
+              </label>
+              <div class="relative flex items-center rounded-xl bg-surface-container-low shadow-sm border border-surface-container-high/60 px-space-md">
+                <span class="font-pos-numeral-md text-pos-numeral-md text-primary font-bold">Rp</span>
+                <input class="w-full bg-transparent py-2.5 px-space-xs font-pos-numeral-md text-pos-numeral-md text-on-surface outline-none tracking-tight font-bold" id="setoranTunai" type="text" value="300.000"/>
+                <button class="shrink-0 px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant hover:text-primary text-label-sm font-label-sm font-semibold" onclick="quickFillCash(300000)" type="button">Pas 50 gl</button>
+              </div>
+            </div>
+
+            <!-- Field 4: Klaim Bensin -->
+            <div class="flex flex-col gap-1.5">
+              <label class="font-label-md text-label-md text-on-surface flex items-center justify-between font-semibold" for="klaimBensin">
+                <span class="flex items-center gap-1">
+                  <span class="material-symbols-outlined text-secondary text-[18px]">local_gas_station</span>
+                  Klaim Bensin Armada (Opsional)
+                </span>
+                <span class="font-label-sm text-label-sm text-outline">Struk Terlampir</span>
+              </label>
+              <div class="relative flex items-center rounded-xl bg-surface-container-low shadow-sm border border-surface-container-high/60 px-space-md">
+                <span class="font-pos-numeral-md text-label-md text-secondary font-bold">Rp</span>
+                <input class="w-full bg-transparent py-2 px-space-xs font-pos-numeral-md text-label-lg text-on-surface outline-none font-semibold" id="klaimBensin" type="text" value="25.000"/>
+              </div>
+            </div>
+
+            <!-- Field 5: Catatan Perjalanan -->
+            <div class="flex flex-col gap-1.5">
+              <label class="font-label-md text-label-md text-on-surface flex items-center gap-1 font-semibold" for="catatanKendala">
+                <span class="material-symbols-outlined text-primary text-[18px]">edit_note</span>
+                4. Catatan Perjalanan &amp; Kendala Pelanggan
+              </label>
+              <textarea class="w-full rounded-xl bg-surface-container-low p-space-sm font-body-sm text-body-sm text-on-surface outline-none shadow-sm border border-surface-container-high/60 resize-none placeholder:text-outline" id="catatanKendala" rows="3">Pelanggan Ibu Lina belum ada di rumah, 2 galon dititip tetangga. Bensin armada diisi Rp 25.000</textarea>
+            </div>
+
+          </form>
+        </div>
+      </div>
+
+      <!-- WhatsApp Action Preview Box -->
+      <div class="px-margin mt-space-md">
+        <div class="rounded-xl bg-surface-container-low p-space-md shadow-sm border border-surface-container/60">
+          <div class="flex items-center justify-between mb-space-sm">
+            <span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1 font-medium">
+              <span class="material-symbols-outlined text-[16px] text-tertiary">quick_reference</span>
+              Pratinjau Format Pesan Otomatis Admin:
+            </span>
+            <button class="font-label-sm text-label-sm text-primary flex items-center gap-0.5 hover:underline font-semibold" onclick="copyDriverWAPreview()" type="button">
+              <span class="material-symbols-outlined text-[14px]">content_copy</span>
+              Salin
+            </button>
+          </div>
+          <div class="rounded-lg bg-surface-container-lowest p-space-sm font-mono text-[12px] leading-relaxed text-on-surface shadow-xs whitespace-pre-line select-all border border-surface-container/60" id="waPreviewText">
+            <!-- Populated dynamically -->
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex flex-col sm:flex-row gap-space-sm mt-space-md">
+            <!-- WhatsApp Primary Button -->
+            <a class="flex-1 h-12 rounded-xl bg-tertiary text-on-tertiary font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-md active:translate-y-0.5 hover:bg-tertiary-container transition-all" id="btnKirimWhatsApp" href="#" target="_blank">
+              <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.711 2.598 2.669-.699c.974.531 1.77.813 2.791.814 3.183 0 5.77-2.586 5.77-5.766.001-3.181-2.585-5.766-5.77-5.766zm9.969 5.766c0 5.514-4.486 10-10 10-1.748 0-3.385-.45-4.819-1.238l-5.181 1.357 1.382-5.048c-.898-1.488-1.382-3.21-1.382-5.071 0-5.514 4.486-10 10-10s10 4.486 10 10zm-5.008 2.531c-.13-.217-.478-.348-.999-.608-.521-.26-3.084-1.522-3.562-1.696-.478-.174-.826-.261-1.173.261-.348.521-1.347 1.696-1.651 2.043-.304.348-.609.391-1.13.13-.521-.261-2.2-.811-4.191-2.587-1.549-1.382-2.596-3.089-2.9-3.61-.304-.522-.032-.804.228-1.064.234-.234.522-.609.782-.913.261-.304.348-.522.522-.869.174-.348.087-.652-.043-.913-.13-.261-1.173-2.825-1.608-3.869-.424-1.018-.857-.879-1.173-.896l-.999-.017c-.348 0-.913.13-1.391.652-.478.522-1.826 1.782-1.826 4.347 0 2.565 1.869 5.043 2.13 5.391.261.348 3.682 5.623 8.924 7.886 1.247.538 2.22.859 2.979 1.1.1.25.793.754 1.481.706.767-.054 2.368-.968 2.701-1.903.333-.935.333-1.735.234-1.903z"></path>
+              </svg>
+              <span>Kirim Laporan via WhatsApp</span>
+            </a>
+            <!-- Finish Shift Button -->
+            <button class="flex-1 h-12 rounded-xl bg-surface-container text-on-surface font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 hover:bg-surface-container-high transition-colors active:scale-[0.99] border border-surface-container-high/60" onclick="saveDriverShift()" type="button">
+              <span class="material-symbols-outlined text-[18px]">task_alt</span>
+              <span>Simpan &amp; Selesai Shift</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Riwayat Laporan Terakhir -->
+      <div class="px-margin mt-space-md">
+        <div class="flex items-center justify-between mb-space-sm">
+          <div class="flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-primary text-[18px]">history</span>
+            <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Riwayat Pengantaran</h3>
+          </div>
+          <span class="font-label-sm text-label-sm text-outline">Tervalidasi di Sheets</span>
+        </div>
+        <div class="flex flex-col gap-space-xs" id="driver-history-container">
+          <!-- Populated by app.js -->
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- =======================================================================
+         VIEW 4: SLIP & REKAP GAJI KARYAWAN
+         ======================================================================= -->
+    <div id="view-payroll" class="app-view hidden flex flex-col w-full pb-10">
+      
+      <!-- Top Operational Banner & Period Selector -->
+      <section class="px-margin pt-space-md flex flex-col gap-space-md">
+        <div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm relative overflow-hidden border border-surface-container-high/60">
+          <div class="absolute -right-6 -bottom-6 w-28 h-28 rounded-full bg-secondary-fixed/20 pointer-events-none blur-xl"></div>
+          <div class="flex items-center justify-between gap-space-xs">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="material-symbols-outlined text-primary text-[20px]">calendar_month</span>
+              <span class="font-label-sm text-label-sm text-outline uppercase tracking-wider truncate font-semibold">Periode Penggajian</span>
+            </div>
+            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-label-sm font-label-sm shrink-0 font-semibold">
+              <span class="w-2 h-2 rounded-full bg-tertiary animate-ping"></span>
+              <span>Siap Dicairkan</span>
+            </div>
+          </div>
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+            <div>
+              <h2 class="font-headline-lg-mobile sm:font-headline-lg text-headline-lg-mobile sm:text-headline-lg text-on-surface font-bold">Mei 2024</h2>
+              <p class="font-body-sm text-body-sm text-on-surface-variant">Siklus: 1 - 31 Mei 2024 • Depot Zam Water Pusat</p>
+            </div>
+            <div class="flex items-center gap-2 self-start sm:self-auto">
+              <button class="px-3.5 py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-bold flex items-center gap-1.5 shadow-sm active:translate-y-0.5 hover:bg-primary-container transition-all" id="btn-batch-payout" onclick="triggerBatchPayout()" type="button">
+                <span class="material-symbols-outlined text-[18px]">payments</span>
+                <span>Cairkan Semua</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Financial KPI Summary Cards -->
+        <div class="grid grid-cols-2 gap-space-sm">
+          <div class="bg-primary text-on-primary p-space-md rounded-xl shadow-sm flex flex-col justify-between relative overflow-hidden">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-label-sm text-label-sm text-on-primary-container/80 uppercase font-semibold">Total Beban Gaji</span>
+              <span class="material-symbols-outlined text-secondary-fixed text-[20px]">account_balance_wallet</span>
+            </div>
+            <div>
+              <span class="font-pos-numeral-md text-pos-numeral-md tracking-tight block font-bold">Rp 10.620.000</span>
+              <span class="font-body-sm text-body-sm text-on-primary-container/90 flex items-center gap-1 mt-0.5">
+                <span class="material-symbols-outlined text-[14px]">check_circle</span>
+                Alokasi Kas Bersih
+              </span>
+            </div>
+          </div>
+          <div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col justify-between border border-surface-container-high/60">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-label-sm text-label-sm text-outline uppercase font-semibold">Total Karyawan</span>
+              <span class="material-symbols-outlined text-primary text-[20px]">badge</span>
+            </div>
+            <div>
+              <span class="font-pos-numeral-md text-pos-numeral-md text-on-surface block font-bold">4 Orang</span>
+              <span class="font-body-sm text-body-sm text-on-surface-variant truncate block mt-0.5">1 Kasir, 2 Supir, 1 Teknisi</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Stat Bar -->
+        <div class="bg-surface-container-low rounded-xl p-space-sm px-space-md flex items-center justify-between gap-space-sm border border-surface-container/60">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="w-8 h-8 rounded-lg bg-secondary-fixed/50 flex items-center justify-center text-on-secondary-fixed shrink-0">
+              <span class="material-symbols-outlined text-[18px]">local_drink</span>
+            </div>
+            <p class="font-body-sm text-body-sm text-on-surface truncate">
+              Total insentif galon bulan ini: <span class="font-label-md text-label-md text-primary font-semibold">1.070 Galon Terkirim</span>
+            </p>
+          </div>
+          <span class="text-tertiary material-symbols-outlined text-[20px] shrink-0">trending_up</span>
+        </div>
+      </section>
+
+      <!-- Employee Salary Cards Section -->
+      <section class="px-margin pt-space-lg flex flex-col gap-space-sm">
+        <div class="flex items-center justify-between px-1">
+          <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Rincian Slip Pegawai</h3>
+          <span class="font-label-sm text-label-sm text-outline">4 Dokumen</span>
+        </div>
+
+        <!-- Container Card Karyawan -->
+        <div class="flex flex-col space-y-3" id="payroll-cards-container">
+          <!-- Populated by app.js -->
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+
+
+  <!-- =========================================================================
+       BOTTOM NAVIGATION BAR (Mobile First & App Shell)
+       ========================================================================= -->
+  <nav class="fixed bottom-0 w-full z-40 pb-safe bg-surface-container-lowest/95 backdrop-blur-xl border-t border-surface-container-high/60 shadow-[0_-2px_12px_rgba(0,0,0,0.05)]">
+    <div class="grid grid-cols-4 items-center h-20 px-space-xs max-w-lg mx-auto">
+      
+      <!-- Tab 1: Kasir POS -->
+      <a class="bottom-nav-item flex flex-col items-center justify-center gap-1 py-1 px-1 h-full min-h-[44px] transition-colors text-primary font-semibold cursor-pointer" data-tab="pos" href="#pos">
+        <span class="material-symbols-outlined text-[24px]">shopping_cart</span>
+        <span class="font-label-sm text-label-sm tracking-tight text-center truncate w-full">Kasir POS</span>
+      </a>
+
+      <!-- Tab 2: Stok & Cust -->
+      <a class="bottom-nav-item flex flex-col items-center justify-center gap-1 py-1 px-1 h-full min-h-[44px] text-on-surface-variant transition-colors hover:text-on-surface cursor-pointer" data-tab="stok" href="#stok">
+        <span class="material-symbols-outlined text-[24px]">database</span>
+        <span class="font-label-sm text-label-sm tracking-tight text-center truncate w-full">Stok &amp; Cust</span>
+      </a>
+
+      <!-- Tab 3: Supir -->
+      <a class="bottom-nav-item flex flex-col items-center justify-center gap-1 py-1 px-1 h-full min-h-[44px] text-on-surface-variant transition-colors hover:text-on-surface cursor-pointer" data-tab="driver" href="#driver">
+        <span class="material-symbols-outlined text-[24px]">local_shipping</span>
+        <span class="font-label-sm text-label-sm tracking-tight text-center truncate w-full">Supir</span>
+      </a>
+
+      <!-- Tab 4: Slip Gaji -->
+      <a class="bottom-nav-item flex flex-col items-center justify-center gap-1 py-1 px-1 h-full min-h-[44px] text-on-surface-variant transition-colors hover:text-on-surface cursor-pointer" data-tab="payroll" href="#payroll">
+        <span class="material-symbols-outlined text-[24px]">receipt_long</span>
+        <span class="font-label-sm text-label-sm tracking-tight text-center truncate w-full">Slip Gaji</span>
+      </a>
+
+    </div>
+  </nav>
+
+
+  <!-- =========================================================================
+       MODAL 1: THERMAL RECEIPT 58mm (STRUK KASIR)
+       ========================================================================= -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center px-4 bg-on-surface/40 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300" id="receipt-modal">
+    <div class="w-full max-w-sm bg-surface-container-lowest rounded-2xl p-space-md shadow-2xl transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh] overflow-y-auto" id="receipt-card">
+      
+      <!-- Modal Top Controls -->
+      <div class="flex justify-between items-center mb-space-sm pb-2 border-b border-surface-container/60">
+        <span class="font-label-md text-label-md text-outline font-semibold">Pratinjau Kertas 58mm</span>
+        <button class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface hover:text-error" onclick="closeReceiptModal()">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <!-- Thermal Paper Slip Container -->
+      <div class="bg-surface-container-low p-4 rounded-xl font-mono text-[12px] leading-tight text-on-surface flex flex-col gap-1.5 shadow-inner border border-surface-container/80">
+        <div class="text-center pb-2">
+          <h4 class="font-bold text-label-lg tracking-wider text-primary">DEPOT ZAM WATER</h4>
+          <p class="text-[11px] text-outline">Jl. Air Murni No. 12, Sidoarjo</p>
+          <p class="text-[11px] text-outline">Telp / WA: 0812-3456-7890</p>
+        </div>
+        <div class="flex justify-between text-[11px] text-on-surface-variant">
+          <span id="receipt-date">24/10/2024 14:32</span>
+          <span>Kasir: #01-Budi</span>
+        </div>
+        <div class="flex justify-between text-[11px] text-on-surface-variant">
+          <span id="receipt-no">INV/ZAM/20241024/098</span>
+          <span id="receipt-customer">Cust: Walk-in</span>
+        </div>
+        <!-- Dashed Divider -->
+        <div class="w-full py-1 text-outline truncate text-center tracking-widest opacity-60">--------------------------------</div>
+        
+        <!-- Receipt Line Items -->
+        <div class="flex flex-col gap-1.5 py-1 text-[12px]" id="receipt-line-items">
+          <!-- Populated by app.js -->
+        </div>
+
+        <div class="w-full py-1 text-outline truncate text-center tracking-widest opacity-60">--------------------------------</div>
+        <div class="flex justify-between text-body-sm font-semibold">
+          <span>Subtotal</span>
+          <span id="receipt-subtotal">Rp 26.000</span>
+        </div>
+        <div class="flex justify-between text-body-sm">
+          <span>Diskon</span>
+          <span>Rp 0</span>
+        </div>
+        <div class="flex justify-between text-label-md font-bold text-on-surface pt-1">
+          <span>TOTAL</span>
+          <span class="text-primary font-bold" id="receipt-total">Rp 26.000</span>
+        </div>
+        <div class="flex justify-between text-[11px] text-outline">
+          <span id="receipt-pay-method">Bayar (Tunai)</span>
+          <span id="receipt-paid-amount">Rp 26.000</span>
+        </div>
+        <div class="flex justify-between text-[11px] text-outline">
+          <span>Kembali</span>
+          <span id="receipt-change-amount">Rp 0</span>
+        </div>
+        <div class="text-center pt-3 mt-1 pb-1 border-t border-dashed border-outline/30">
+          <p class="font-medium text-[11px]">Terima Kasih Atas Kunjungan Anda</p>
+          <p class="text-[10px] text-outline">Air Minum Segar, Sehat &amp; Higienis</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons Inside Modal -->
+      <div class="flex items-center gap-2 mt-4">
+        <button class="flex-1 py-3 px-3 rounded-xl bg-primary text-on-primary font-label-md text-label-md font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-transform hover:bg-primary-container" onclick="printThermalReceipt()">
+          <span class="material-symbols-outlined text-[18px]">print</span>
+          <span>Kirim ke Printer</span>
+        </button>
+        <button class="py-3 px-3 rounded-xl bg-secondary-fixed text-on-secondary-fixed font-label-md text-label-md font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95" onclick="shareReceiptWA()">
+          <span class="material-symbols-outlined text-[18px]">send</span>
+          <span>WA</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- =========================================================================
+       MODAL 2: DIGITAL PAYSLIP MODAL (SLIP GAJI RESMI)
+       ========================================================================= -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center px-4 bg-on-surface/40 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300" id="slip-modal">
+    <div class="w-full max-w-md bg-surface-container-lowest rounded-2xl p-space-md shadow-2xl transform translate-y-8 transition-transform duration-300 flex flex-col max-h-[92vh] overflow-y-auto" id="slip-card-content">
+      
+      <!-- Modal Top Controls -->
+      <div class="flex justify-between items-center mb-space-sm pb-2 border-b border-surface-container/60">
+        <span class="font-label-md text-label-md text-outline font-semibold">Dokumen Slip Gaji Digital</span>
+        <button class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface hover:text-error" onclick="closeSlipModal()">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <!-- Payslip Form Document -->
+      <div class="bg-surface-container-low p-4 rounded-xl text-on-surface flex flex-col gap-3 shadow-inner border border-surface-container/80 relative">
+        <div class="flex items-center justify-between border-b border-surface-container-high/80 pb-2">
+          <div>
+            <h3 class="font-headline-sm text-primary font-bold">DEPOT ZAM WATER</h3>
+            <p class="text-[11px] text-outline">Slip Gaji Elektronik • Periode Mei 2024</p>
+          </div>
+          <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Resmi</span>
+        </div>
+
+        <!-- Employee Info -->
+        <div class="grid grid-cols-2 gap-2 text-[12px] bg-surface-container-lowest p-2.5 rounded-lg border border-surface-container/60">
+          <div>
+            <span class="text-outline block text-[10px]">Nama Karyawan:</span>
+            <span class="font-bold text-on-surface" id="modal-emp-name">Budi Santoso</span>
+          </div>
+          <div>
+            <span class="text-outline block text-[10px]">Jabatan:</span>
+            <span class="font-medium text-on-surface" id="modal-emp-role">Supir / Kurir Galon</span>
+          </div>
+        </div>
+
+        <!-- Section A: Penghasilan -->
+        <div class="flex flex-col gap-1.5 text-[12px]">
+          <span class="font-bold text-primary text-[11px] uppercase tracking-wider">A. Rincian Penghasilan</span>
+          <div class="flex justify-between items-center py-0.5 border-b border-surface-container-high/40">
+            <span>Gaji Pokok</span>
+            <span class="font-pos-numeral-md font-semibold" id="modal-base-pay">Rp 2.200.000</span>
+          </div>
+          <div class="flex justify-between items-center py-0.5 border-b border-surface-container-high/40">
+            <span id="modal-bonus-title">Insentif Antar Galon</span>
+            <span class="font-pos-numeral-md text-tertiary font-bold" id="modal-bonus-pay">+Rp 650.000</span>
+          </div>
+          <div class="flex justify-between items-center py-0.5 border-b border-surface-container-high/40">
+            <span id="modal-allowance-title">Uang Makan &amp; Transport</span>
+            <span class="font-pos-numeral-md font-semibold" id="modal-allowance-pay">Rp 400.000</span>
+          </div>
+        </div>
+
+        <!-- Section B: Potongan -->
+        <div class="flex flex-col gap-1.5 text-[12px]">
+          <span class="font-bold text-error text-[11px] uppercase tracking-wider">B. Potongan</span>
+          <div class="flex justify-between items-center py-0.5 border-b border-surface-container-high/40">
+            <span>Kasbon / Pinjaman</span>
+            <span class="font-pos-numeral-md">Rp 0</span>
+          </div>
+          <div class="flex justify-between items-center py-0.5">
+            <span>BPJS Tenaga Kerja</span>
+            <span class="text-outline text-[11px]">Ditanggung Depot (Rp 0)</span>
+          </div>
+        </div>
+
+        <!-- Take-home Pay Highlight -->
+        <div class="bg-primary text-on-primary rounded-xl p-3 flex items-center justify-between mt-1 shadow-sm">
+          <div>
+            <span class="text-[10px] text-on-primary-container uppercase font-semibold block">Gaji Bersih Diterima (Take-Home)</span>
+            <span class="font-pos-numeral-lg text-pos-numeral-md font-bold tracking-tight" id="modal-total-pay">Rp 3.250.000</span>
+          </div>
+          <div class="w-9 h-9 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container">
+            <span class="material-symbols-outlined text-[20px]">verified</span>
+          </div>
+        </div>
+
+        <!-- Digital Stamp & Signatures -->
+        <div class="flex items-end justify-between pt-2 text-center text-[11px]">
+          <div class="flex flex-col items-center">
+            <span class="text-outline mb-6">Penerima,</span>
+            <span class="underline font-semibold" id="modal-sign-emp">Budi Santoso</span>
+          </div>
+          <div class="flex flex-col items-center">
+            <span class="text-outline mb-1">Pengelola Depot Zam Water,</span>
+            <div class="w-20 h-6 flex items-center justify-center text-tertiary">
+              <span class="font-serif italic text-[11px] tracking-wider font-bold">ZamWater-Auth</span>
+            </div>
+            <span class="underline font-semibold">H. Zamroni (Owner)</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Action Buttons Inside Modal -->
+      <div class="flex flex-col sm:flex-row items-center gap-space-sm mt-3">
+        <button class="w-full sm:flex-1 py-2.5 px-space-md rounded-lg bg-tertiary text-on-tertiary font-label-md text-label-md font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-sm" onclick="shareSlipWA(state.activeEmployeeKey)">
+          <span class="material-symbols-outlined text-[20px]">send</span>
+          <span>Kirim Slip via WhatsApp</span>
+        </button>
+        <button class="w-full sm:flex-1 py-2.5 px-space-md rounded-lg bg-surface-container text-on-surface font-label-md text-label-md font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform" onclick="window.print()">
+          <span class="material-symbols-outlined text-[20px]">print</span>
+          <span>Cetak / PDF</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- =========================================================================
+       MODAL 3: PENGATURAN API GOOGLE SHEETS & BACKEND
+       ========================================================================= -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center px-4 bg-on-surface/40 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300" id="settings-modal">
+    <div class="w-full max-w-lg bg-surface-container-lowest rounded-2xl p-space-md shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto">
+      
+      <div class="flex justify-between items-center pb-2 border-b border-surface-container/60 mb-space-sm">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary text-[24px]">cloud_sync</span>
+          <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">Pengaturan API Google Sheets</h3>
+        </div>
+        <button class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface hover:text-error" onclick="closeSettingsModal()">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="font-label-md text-label-md font-semibold text-on-surface block mb-1">
+            Google Apps Script Web App URL
+          </label>
+          <input type="text" id="settings-gas-url" placeholder="https://script.google.com/macros/s/AKfycb.../exec" class="w-full p-2.5 rounded-xl bg-surface-container-low font-mono text-xs text-on-surface border border-surface-container-high/80 focus:ring-2 focus:ring-primary/20 outline-none"/>
+          <p class="text-[11px] text-outline mt-1">
+            Tempelkan URL hasil <strong>Deploy > New deployment > Web app</strong> dari file <code>Code.gs</code> Anda.
+          </p>
+        </div>
+
+        <div>
+          <label class="font-label-md text-label-md font-semibold text-on-surface block mb-1">
+            Nomor WhatsApp Admin Depot
+          </label>
+          <input type="text" id="settings-admin-phone" placeholder="6281234567890" class="w-full p-2.5 rounded-xl bg-surface-container-low font-body-md text-body-md text-on-surface border border-surface-container-high/80 focus:ring-2 focus:ring-primary/20 outline-none"/>
+          <p class="text-[11px] text-outline mt-1">
+            Digunakan sebagai tujuan otomatis tombol WhatsApp pengiriman laporan supir &amp; pesanan.
+          </p>
+        </div>
+
+        <div class="p-3 bg-surface-container-low rounded-xl border border-surface-container/80 flex items-center justify-between">
+          <div>
+            <span class="font-label-sm text-label-sm font-bold block">Status Koneksi API:</span>
+            <span id="gas-test-result" class="font-body-sm text-xs text-outline">Belum dites</span>
+          </div>
+          <button onclick="testGasConnection()" class="px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface font-label-sm text-label-sm font-semibold hover:bg-surface-container">
+            Tes Koneksi
+          </button>
+        </div>
+
+        <div class="p-3 rounded-xl bg-primary/5 border border-primary/20 text-xs text-on-surface space-y-1">
+          <p class="font-semibold text-primary">💡 Panduan Cepat:</p>
+          <p>1. Jika URL belum dimasukkan, aplikasi beroperasi dalam <strong>Mode Demo / Offline First</strong> menggunakan memori lokal.</p>
+          <p>2. Setelah URL dimasukkan dan disimpan, data transaksi POS, supir, dan pelanggan langsung tersinkronisasi ke Google Spreadsheet secara real-time.</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 mt-5 pt-3 border-t border-surface-container/60">
+        <button onclick="closeSettingsModal()" class="flex-1 py-2.5 rounded-xl bg-surface-container text-on-surface font-label-md text-label-md font-semibold">
+          Batal
+        </button>
+        <button onclick="saveSettings()" class="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md font-bold hover:bg-primary-container shadow-sm">
+          Simpan Pengaturan
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- =========================================================================
+       MODAL 4: TAMBAH PELANGGAN BARU
+       ========================================================================= -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center px-4 bg-on-surface/40 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300" id="add-cust-modal">
+    <div class="w-full max-w-md bg-surface-container-lowest rounded-2xl p-space-md shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto">
+      
+      <div class="flex justify-between items-center pb-2 border-b border-surface-container/60 mb-space-sm">
+        <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">Tambah Pelanggan Baru</h3>
+        <button class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface hover:text-error" onclick="closeAddCustomerModal()">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <form class="space-y-3" onsubmit="event.preventDefault(); saveNewCustomer();">
+        <div>
+          <label class="font-label-sm text-outline block mb-1">Nama Pelanggan / Toko *</label>
+          <input type="text" id="cust-new-name" required placeholder="Contoh: Bu Hj. Maryam" class="w-full p-2.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high/80 focus:ring-2 focus:ring-primary/20 outline-none text-sm"/>
+        </div>
+        <div>
+          <label class="font-label-sm text-outline block mb-1">Nomor WhatsApp / HP *</label>
+          <input type="tel" id="cust-new-phone" required placeholder="081234567890" class="w-full p-2.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high/80 focus:ring-2 focus:ring-primary/20 outline-none text-sm"/>
+        </div>
+        <div>
+          <label class="font-label-sm text-outline block mb-1">Kategori Pelanggan</label>
+          <select id="cust-new-category" class="w-full p-2.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high/80 focus:ring-2 focus:ring-primary/20 outline-none text-sm">
+            <option value="Warung & Toko">Warung & Toko</option>
+            <option value="Perumahan">Perumahan / Rumah Tangga</option>
+            <option value="Kantor & Usaha">Kantor & Usaha</option>
+          </select>
+        </div>
+        <div>
+          <label class="font-label-sm text-outline block mb-1">Alamat Lengkap</label>
+          <textarea id="cust-new-address" rows="2" placeholder="Nama jalan, nomor rumah, patokan..." class="w-full p-2.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high/80 focus:ring-2 focus:ring-primary/20 outline-none text-sm resize-none"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="font-label-sm text-outline block mb-1">Paket Langganan</label>
+            <input type="text" id="cust-new-plan" placeholder="2 Galon/minggu" class="w-full p-2.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high/80 text-sm outline-none"/>
+          </div>
+          <div>
+            <label class="font-label-sm text-outline block mb-1">Deposit Galon</label>
+            <input type="number" id="cust-new-deposit" min="0" value="2" class="w-full p-2.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high/80 text-sm outline-none"/>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 pt-3">
+          <button type="button" onclick="closeAddCustomerModal()" class="flex-1 py-2.5 rounded-xl bg-surface-container text-on-surface font-label-md text-label-md font-semibold">
+            Batal
+          </button>
+          <button type="submit" class="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md font-bold hover:bg-primary-container shadow-sm">
+            Simpan Pelanggan
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+
+  <!-- =========================================================================
+       MODAL 5: EDIT STOK BARANG
+       ========================================================================= -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center px-4 bg-on-surface/40 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300" id="stock-modal">
+    <div class="w-full max-w-sm bg-surface-container-lowest rounded-2xl p-space-md shadow-2xl flex flex-col">
+      <div class="flex justify-between items-center pb-2 border-b border-surface-container/60 mb-space-sm">
+        <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">Update Jumlah Stok</h3>
+        <button class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface hover:text-error" onclick="closeEditStockModal()">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+      <input type="hidden" id="modal-stock-id"/>
+      <div class="space-y-3">
+        <div>
+          <label class="font-label-sm text-outline block mb-1">Nama Produk</label>
+          <input type="text" id="modal-stock-name" disabled class="w-full p-2.5 rounded-xl bg-surface-container font-semibold text-on-surface border border-surface-container-high/80 text-sm"/>
+        </div>
+        <div>
+          <label class="font-label-sm text-outline block mb-1">Jumlah Stok Fisik Saat Ini</label>
+          <input type="number" id="modal-stock-qty" min="0" class="w-full p-3 rounded-xl bg-surface-container-low font-pos-numeral-md text-headline-sm text-primary font-bold text-center border border-surface-container-high/80 focus:ring-2 focus:ring-primary/20 outline-none"/>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <button type="button" onclick="closeEditStockModal()" class="flex-1 py-2.5 rounded-xl bg-surface-container text-on-surface font-label-md text-label-md font-semibold">
+          Batal
+        </button>
+        <button type="button" onclick="saveStockUpdate()" class="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md font-bold hover:bg-primary-container shadow-sm">
+          Simpan ke Sheets
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- =========================================================================
+       GLOBAL FLOATING TOAST NOTIFICATION
+       ========================================================================= -->
+  <div class="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full bg-inverse-surface text-inverse-on-surface shadow-xl flex items-center gap-2 text-label-md opacity-0 pointer-events-none transition-all duration-300 border border-inverse-on-surface/20 max-w-sm text-center" id="global-toast">
+    <span class="material-symbols-outlined text-secondary-fixed text-[20px]" id="global-toast-icon">check_circle</span>
+    <span id="global-toast-text">Pemberitahuan</span>
+  </div>
+
+  <!-- JavaScript Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
