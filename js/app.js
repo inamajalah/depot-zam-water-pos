@@ -29,6 +29,7 @@ const state = {
 
 // Inisialisasi Saat Dokumen Dimuat
 document.addEventListener('DOMContentLoaded', async () => {
+  migrateConfigToDefault(); // Pastikan data config terbaru terpakai
   initAuth();          // Cek status login & tampilkan login gate jika perlu
   setupNavigation();
   setupDriverCalculations();
@@ -43,6 +44,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   updatePaymentDisplay();
   startQrisTimer();
 });
+
+/**
+ * Pastikan nilai config.js terbaru dipakai.
+ * Hapus localStorage lama HANYA jika user belum pernah override via Pengaturan.
+ * Versi config disimpan sebagai penanda — jika versi berubah, reset otomatis.
+ */
+function migrateConfigToDefault() {
+  const CONFIG_VERSION = 'v2.1-inam'; // Ganti angka ini setiap update config.js
+  const storedVersion = localStorage.getItem('zam_config_version');
+
+  if (storedVersion !== CONFIG_VERSION) {
+    // Versi baru terdeteksi → hapus semua config lama, pakai nilai dari config.js
+    const keysToReset = [
+      'zam_gas_url', 'zam_depot_name', 'zam_depot_address', 'zam_depot_phone',
+      'zam_admin_name', 'zam_admin_phone', 'zam_bank_name', 'zam_bank_account',
+      'zam_bank_holder', 'zam_qris_nmid', 'zam_qris_image'
+    ];
+    keysToReset.forEach(key => localStorage.removeItem(key));
+    localStorage.setItem('zam_config_version', CONFIG_VERSION);
+    console.info('✅ Config Depot Zam Water diperbarui ke', CONFIG_VERSION);
+  }
+}
 
 /**
  * -------------------------------------------------------------
