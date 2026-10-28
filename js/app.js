@@ -11,13 +11,10 @@ const state = {
   customerSearchTerm: '',
   selectedCustomerCat: 'all',
   stockTab: 'stok',
-  cart: [
-    { id: 'PROD-02', nama: 'Isi Ulang Galon RO', price: 8000, qty: 2 },
-    { id: 'PROD-08', nama: 'Tisu Pembersih', price: 10000, qty: 1 }
-  ],
+  cart: [],
   selectedCustomer: 'Pelanggan Walk-in',
   payMethod: 'cash',
-  nominalReceived: 26000,
+  nominalReceived: 0,
   activeEmployeeKey: 'budi',
   products: [],
   customers: [],
@@ -32,7 +29,7 @@ const state = {
 
 // Inisialisasi Saat Dokumen Dimuat
 document.addEventListener('DOMContentLoaded', async () => {
-  initAuth();
+  initAuth();          // Cek status login & tampilkan login gate jika perlu
   setupNavigation();
   setupDriverCalculations();
   await loadInitialData();
@@ -57,15 +54,83 @@ function initAuth() {
   if (savedUser) {
     try {
       state.currentUser = JSON.parse(savedUser);
+      updateAuthUI();
+      // Sudah login — sembunyikan login gate
+      hideLoginGate();
     } catch (e) {
-      state.currentUser = CONFIG.USERS[0]; // Default ke Admin
+      state.currentUser = null;
+      showLoginGate();
     }
   } else {
-    // Default pertama kali login sebagai Admin
-    state.currentUser = CONFIG.USERS[0];
-    localStorage.setItem('zam_logged_user', JSON.stringify(state.currentUser));
+    // Belum pernah login — tampilkan halaman login penuh
+    state.currentUser = null;
+    showLoginGate();
   }
-  updateAuthUI();
+}
+
+function showLoginGate() {
+  const gate = document.getElementById('login-gate');
+  if (gate) {
+    gate.classList.remove('opacity-0', 'pointer-events-none');
+    gate.classList.add('opacity-100');
+  }
+  // Kosongkan input
+  const uEl = document.getElementById('gate-username');
+  const pEl = document.getElementById('gate-pin');
+  if (uEl) uEl.value = '';
+  if (pEl) pEl.value = '';
+  // Fokus ke field username setelah animasi
+  setTimeout(() => { if (uEl) uEl.focus(); }, 300);
+}
+
+function hideLoginGate() {
+  const gate = document.getElementById('login-gate');
+  if (gate) {
+    gate.classList.add('opacity-0', 'pointer-events-none');
+    gate.classList.remove('opacity-100');
+  }
+}
+
+function submitGateLogin(e) {
+  if (e) e.preventDefault();
+  const username = document.getElementById('gate-username')?.value.trim().toLowerCase();
+  const pin = document.getElementById('gate-pin')?.value.trim();
+
+  const found = CONFIG.USERS.find(u => u.username.toLowerCase() === username && u.pin === pin);
+  if (found) {
+    state.currentUser = found;
+    localStorage.setItem('zam_logged_user', JSON.stringify(found));
+    updateAuthUI();
+    hideLoginGate();
+    showToast(`Selamat datang, ${found.nama}! (${found.roleLabel})`, 'verified_user');
+    // Arahkan ke tab sesuai peran
+    if (found.role === 'supir') {
+      switchView('driver');
+    }
+  } else {
+    const errEl = document.getElementById('gate-error');
+    if (errEl) {
+      errEl.textContent = 'Username atau PIN salah! Coba: admin / 1234';
+      errEl.classList.remove('hidden');
+      setTimeout(() => errEl.classList.add('hidden'), 3000);
+    }
+    // Getar input PIN
+    const pinInput = document.getElementById('gate-pin');
+    if (pinInput) {
+      pinInput.classList.add('border-error', 'ring-2', 'ring-error/30');
+      setTimeout(() => pinInput.classList.remove('border-error', 'ring-2', 'ring-error/30'), 1500);
+    }
+  }
+}
+
+function selectGateRole(role) {
+  const user = CONFIG.USERS.find(u => u.role === role);
+  if (user) {
+    const uEl = document.getElementById('gate-username');
+    const pEl = document.getElementById('gate-pin');
+    if (uEl) uEl.value = user.username;
+    if (pEl) pEl.value = user.pin;
+  }
 }
 
 function updateAuthUI() {
@@ -145,10 +210,11 @@ function submitLogin(e) {
 }
 
 function logoutUser() {
-  state.currentUser = CONFIG.USERS[1]; // fallback ke kasir
-  localStorage.setItem('zam_logged_user', JSON.stringify(state.currentUser));
-  updateAuthUI();
-  showToast('Beralih ke akun Kasir.', 'logout');
+  state.currentUser = null;
+  localStorage.removeItem('zam_logged_user');
+  closeLoginModal();
+  showLoginGate();
+  showToast('Berhasil keluar. Silakan login kembali.', 'logout');
 }
 
 /**
@@ -1415,6 +1481,10 @@ function openSettingsModal() {
   document.getElementById('settings-depot-name').value = CONFIG.DEPOT_NAME || 'Depot Zam Water';
   document.getElementById('settings-depot-address').value = CONFIG.DEPOT_ADDRESS || 'Jl. Air Murni No. 12, Sidoarjo';
 
+  // Isi no. telp depot jika ada field-nya
+  const depotPhoneEl = document.getElementById('settings-depot-phone');
+  if (depotPhoneEl) depotPhoneEl.value = CONFIG.DEPOT_PHONE || '0812-3456-7890';
+
   // Bank BCA
   document.getElementById('settings-bank-name').value = CONFIG.BANK_NAME || 'BCA';
   document.getElementById('settings-bank-account').value = CONFIG.BANK_ACCOUNT_NUMBER || '8290-128-449';
@@ -1507,6 +1577,7 @@ async function saveAllSettings() {
   const adminPhone = document.getElementById('settings-admin-phone')?.value.trim() || '6281234567890';
   const depotName = document.getElementById('settings-depot-name')?.value.trim() || 'Depot Zam Water';
   const depotAddress = document.getElementById('settings-depot-address')?.value.trim() || 'Jl. Air Murni No. 12, Sidoarjo';
+  const depotPhone = document.getElementById('settings-depot-phone')?.value.trim() || '0812-3456-7890';
 
   // Simpan data rekening BCA & QRIS
   const bankName = document.getElementById('settings-bank-name')?.value.trim() || 'BCA';
@@ -1522,6 +1593,7 @@ async function saveAllSettings() {
   CONFIG.ADMIN_WA_NUMBER = adminPhone.replace(/[^0-9]/g, '');
   CONFIG.DEPOT_NAME = depotName;
   CONFIG.DEPOT_ADDRESS = depotAddress;
+  CONFIG.DEPOT_PHONE = depotPhone;
   CONFIG.BANK_NAME = bankName;
   CONFIG.BANK_ACCOUNT_NUMBER = bankAccount;
   CONFIG.BANK_ACCOUNT_HOLDER = bankHolder;
@@ -1534,6 +1606,7 @@ async function saveAllSettings() {
   localStorage.setItem('zam_admin_phone', CONFIG.ADMIN_WA_NUMBER);
   localStorage.setItem('zam_depot_name', depotName);
   localStorage.setItem('zam_depot_address', depotAddress);
+  localStorage.setItem('zam_depot_phone', depotPhone);
   localStorage.setItem('zam_bank_name', bankName);
   localStorage.setItem('zam_bank_account', bankAccount);
   localStorage.setItem('zam_bank_holder', bankHolder);
@@ -1545,6 +1618,22 @@ async function saveAllSettings() {
   updatePaymentDisplay();
   updateDriverCalculations();
   updateSyncIndicator();
+
+  // Refresh semua elemen UI yang menampilkan info depot & nama pemilik
+  const headerDepotName = document.getElementById('header-depot-name');
+  if (headerDepotName) headerDepotName.textContent = depotName;
+
+  // Update tanda tangan slip gaji yang sedang terbuka (jika ada)
+  const signOwner = document.getElementById('modal-sign-owner');
+  if (signOwner) signOwner.textContent = adminName;
+
+  // Update struk receipt jika modal terbuka
+  const receiptDepotName = document.getElementById('receipt-depot-name');
+  const receiptDepotAddress = document.getElementById('receipt-depot-address');
+  const receiptDepotPhone = document.getElementById('receipt-depot-phone');
+  if (receiptDepotName) receiptDepotName.textContent = depotName;
+  if (receiptDepotAddress) receiptDepotAddress.textContent = depotAddress;
+  if (receiptDepotPhone) receiptDepotPhone.textContent = `Telp/WA: ${depotPhone}`;
 
   showToast('Pengaturan Bank BCA, QRIS & Admin berhasil disimpan!', 'check_circle');
 

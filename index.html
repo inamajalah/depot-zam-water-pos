@@ -112,6 +112,81 @@
 <body class="bg-surface font-body-md text-body-md text-on-surface antialiased flex flex-col min-h-screen selection:bg-secondary-fixed selection:text-on-secondary-fixed">
 
   <!-- =========================================================================
+       LOGIN GATE — Halaman Login Penuh (Tampil pertama jika belum login)
+       Sembunyikan dengan class opacity-0 pointer-events-none setelah login berhasil
+       ========================================================================= -->
+  <div id="login-gate" class="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-surface transition-opacity duration-500 opacity-0 pointer-events-none">
+    <div class="w-full max-w-sm flex flex-col gap-6">
+
+      <!-- Logo & Brand -->
+      <div class="text-center">
+        <div class="w-20 h-20 rounded-3xl bg-gradient-to-tr from-primary to-primary-container flex items-center justify-center text-on-primary shadow-xl mx-auto mb-4">
+          <span class="material-symbols-outlined text-[42px]">water_drop</span>
+        </div>
+        <h1 class="font-headline-lg text-2xl font-bold text-on-surface tracking-tight">Depot Zam Water</h1>
+        <p class="font-body-sm text-sm text-outline mt-1">Sistem Operasional & Kasir POS v2.0</p>
+      </div>
+
+      <!-- Card Login -->
+      <div class="bg-surface-container-lowest rounded-3xl p-6 shadow-2xl border border-surface-container-high/40">
+        <h2 class="font-headline-sm text-lg font-bold text-on-surface mb-1">Masuk ke Sistem</h2>
+        <p class="font-body-sm text-xs text-outline mb-4">Pilih peran atau masukkan kredensial Anda</p>
+
+        <!-- Quick Role Buttons -->
+        <div class="grid grid-cols-3 gap-2 mb-4">
+          <button type="button" onclick="selectGateRole('admin')" class="flex flex-col items-center gap-1 py-2.5 px-2 rounded-2xl bg-surface-container-low text-primary border border-primary/20 hover:bg-primary hover:text-on-primary transition-all active:scale-95 text-xs font-bold">
+            <span class="material-symbols-outlined text-[22px]">manage_accounts</span>
+            Admin
+          </button>
+          <button type="button" onclick="selectGateRole('kasir')" class="flex flex-col items-center gap-1 py-2.5 px-2 rounded-2xl bg-surface-container-low text-secondary border border-secondary/20 hover:bg-secondary hover:text-on-secondary transition-all active:scale-95 text-xs font-bold">
+            <span class="material-symbols-outlined text-[22px]">point_of_sale</span>
+            Kasir
+          </button>
+          <button type="button" onclick="selectGateRole('supir')" class="flex flex-col items-center gap-1 py-2.5 px-2 rounded-2xl bg-surface-container-low text-tertiary border border-tertiary/20 hover:bg-tertiary hover:text-on-tertiary transition-all active:scale-95 text-xs font-bold">
+            <span class="material-symbols-outlined text-[22px]">local_shipping</span>
+            Supir
+          </button>
+        </div>
+
+        <!-- Form Login -->
+        <form onsubmit="submitGateLogin(event)" class="space-y-3">
+          <div>
+            <label class="font-label-sm text-xs text-outline block mb-1.5 font-semibold">Username</label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-[18px] text-outline">person</span>
+              <input type="text" id="gate-username" autocomplete="username" required placeholder="admin / kasir / supir"
+                class="w-full pl-9 pr-3 py-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high/80 text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"/>
+            </div>
+          </div>
+          <div>
+            <label class="font-label-sm text-xs text-outline block mb-1.5 font-semibold">PIN / Kata Sandi</label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-[18px] text-outline">lock</span>
+              <input type="password" id="gate-pin" autocomplete="current-password" required placeholder="PIN default: 1234"
+                class="w-full pl-9 pr-3 py-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high/80 text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"/>
+            </div>
+          </div>
+
+          <!-- Error Message -->
+          <p id="gate-error" class="hidden text-xs text-error font-semibold bg-error-container rounded-xl px-3 py-2 text-center"></p>
+
+          <button type="submit" class="w-full py-3.5 rounded-xl bg-primary text-on-primary font-bold text-sm flex items-center justify-center gap-2 shadow-lg hover:bg-primary-container active:scale-[0.98] transition-all mt-2">
+            <span class="material-symbols-outlined text-[20px]">login</span>
+            Masuk ke Aplikasi
+          </button>
+        </form>
+
+        <p class="text-center text-[10px] text-outline/70 mt-4">
+          Default: admin / 1234 &nbsp;•&nbsp; kasir / 1234 &nbsp;•&nbsp; supir / 1234
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <p class="text-center text-[11px] text-outline/60">Depot Zam Water © 2024 &nbsp;•&nbsp; Versi 2.0</p>
+    </div>
+  </div>
+
+  <!-- =========================================================================
        TOP HEADER (Sticky Glassmorphism)
        ========================================================================= -->
   <header class="fixed top-0 w-full z-40 pt-safe bg-surface-container-lowest/90 backdrop-blur-xl border-b border-surface-container-high/60 shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
@@ -124,7 +199,7 @@
         </div>
         <div class="flex flex-col min-w-0">
           <div class="flex items-center gap-1.5">
-            <span class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-bold">Zam Water</span>
+            <span id="header-depot-name" class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-bold">Zam Water</span>
             <button id="sync-indicator" onclick="openSettingsModal()" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-tertiary-fixed/40 text-on-tertiary-fixed text-label-sm font-label-sm shrink-0 hover:opacity-80 transition-opacity" title="Pengaturan Google Sheets">
               <span id="sync-indicator-dot" class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>
               <span id="sync-indicator-text">Online</span>
@@ -1133,6 +1208,10 @@
         <div>
           <label class="font-label-sm text-outline block mb-1">Alamat Depot (Tercetak di Struk)</label>
           <textarea id="settings-depot-address" rows="2" class="w-full p-2.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high text-sm resize-none"></textarea>
+        </div>
+        <div>
+          <label class="font-label-sm text-outline block mb-1">No. Telp / WhatsApp Depot (Tercetak di Struk)</label>
+          <input type="text" id="settings-depot-phone" placeholder="0812-3456-7890" class="w-full p-2.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high text-sm"/>
         </div>
       </div>
 
